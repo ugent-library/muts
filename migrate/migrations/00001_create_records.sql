@@ -32,7 +32,8 @@ CREATE TABLE mutations (
   record_id TEXT NOT NULL,
   author TEXT NOT NULL,
   reason TEXT,
-  ops JSONB NOT NULL CHECK (jsonb_typeof(ops) = 'array' AND jsonb_array_length(ops) > 0),
+  -- ops JSONB NOT NULL CHECK (jsonb_typeof(ops) = 'array' AND jsonb_array_length(ops) > 0),
+  ops JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 

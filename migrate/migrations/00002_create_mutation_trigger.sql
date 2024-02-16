@@ -13,13 +13,7 @@ BEGIN
     CASE op->>'name'
  
     WHEN 'add-rec' THEN
-        INSERT INTO records (id, type) VALUES (NEW.record_id, (op->'args'->>'type')::ltree)
-        ON CONFLICT (id) DO UPDATE
-        SET type = EXCLUDED.type;
-
-    WHEN 'set-type' THEN
-      UPDATE records SET type = (op->'args'->>'type')::ltree
-      WHERE id = NEW.record_id;
+      INSERT INTO records (id, type) VALUES (NEW.record_id, (op->'args'->>'type')::ltree);
 
     WHEN 'add-attr' THEN
       INSERT INTO attributes (record_id, name, value) VALUES (NEW.record_id, (op->'args'->>'name')::ltree, op->'args'->>'value');
