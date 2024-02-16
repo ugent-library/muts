@@ -33,13 +33,13 @@ func (s *Store) Mutate(ctx context.Context, muts ...Mut) error {
 		if err != nil {
 			return err
 		}
-		rows = append(rows, []any{ulid.Make().String(), mut.RecordID, mut.Author, mut.Reason, ops})
+		rows = append(rows, []any{ulid.Make().String(), mut.Author, mut.Reason, ops})
 	}
 
 	_, err := s.pool.CopyFrom(
 		ctx,
 		pgx.Identifier{"mutations"},
-		[]string{"id", "record_id", "author", "reason", "ops"},
+		[]string{"id", "author", "reason", "ops"},
 		pgx.CopyFromRows(rows),
 	)
 
