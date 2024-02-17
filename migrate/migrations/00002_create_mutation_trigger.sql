@@ -22,7 +22,13 @@ BEGIN
       DELETE FROM attributes WHERE record_id = NEW.record_id;
 
     WHEN 'add-rel' THEN
-      INSERT INTO relations (from_id, to_id, name) VALUES (NEW.record_id, op->'args'->>'to', op->'args'->>'name');
+      INSERT INTO relations (from_id, to_id, name, position)
+      VALUES (
+        NEW.record_id,
+        op->'args'->>'to',
+        op->'args'->>'name',
+        (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND to_id = op->'args'->>'to' AND name = op->'args'->>'name')
+      );
 
     WHEN 'del-rel' THEN
       DELETE FROM relations WHERE from_id = NEW.record_id AND to_id = op->'args'->>'to' AND name = op->'args'->>'name';

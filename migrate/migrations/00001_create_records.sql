@@ -23,8 +23,12 @@ CREATE INDEX attributes_value_gist_idx ON attributes USING GIST (value);
 CREATE TABLE relations (
   from_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
   to_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
-  name TEXT NOT NULL CHECK (name <> '')
---   UNIQUE (from_id, to_id, name)
+  name TEXT NOT NULL CHECK (name <> ''),
+  -- TODO using an int position is nog very efficient when rearranging large lists
+  -- possible solutions: use a floating point or alphanumeric position; or a linked list
+  position INT NOT NULL,
+  -- TODO uniqueness only makes sense if we don't introduce relation attributes
+  UNIQUE (from_id, to_id, name)
 );
 
 CREATE TABLE mutations (
