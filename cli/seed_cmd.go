@@ -27,18 +27,20 @@ var seedCmd = &cobra.Command{
 
 		return s.Mutate(context.Background(),
 			store.Mut{
-				Author: "system",
+				RecordID: bookID,
+				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec(bookID, "Publication.Book"),
-					store.AddAttr(bookID, "title.eng", "A treatise on nonsense"),
+					store.AddRec("Publication.Book"),
+					store.AddAttr("title.eng", "A treatise on nonsense"),
 				},
 			},
 			store.Mut{
-				Author: "system",
+				RecordID: chapterID,
+				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec(chapterID, "Publication.Chapter"),
-					store.AddAttr(chapterID, "title.eng", "Nonsensical introduction"),
-					store.AddRel(chapterID, "partOf", bookID),
+					store.AddRec("Publication.Chapter"),
+					store.AddAttr("title.eng", "Nonsensical introduction"),
+					store.AddRel("partOf", bookID),
 				},
 			},
 		)

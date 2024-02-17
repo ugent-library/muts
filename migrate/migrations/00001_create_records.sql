@@ -29,6 +29,7 @@ CREATE TABLE relations (
 
 CREATE TABLE mutations (
   id TEXT PRIMARY KEY,
+  record_id TEXT NOT NULL,
   author TEXT NOT NULL,
   reason TEXT,
   -- ops JSONB NOT NULL CHECK (jsonb_typeof(ops) = 'array' AND jsonb_array_length(ops) > 0),
@@ -36,6 +37,7 @@ CREATE TABLE mutations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 
+CREATE INDEX mutations_record_id_fkey ON mutations (record_id);
 CREATE INDEX mutations_created_at_key ON mutations (created_at);
 
 -- +goose Down
