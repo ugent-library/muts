@@ -26,6 +26,9 @@ CREATE TABLE relations (
   name TEXT NOT NULL CHECK (name <> ''),
   -- TODO using an int position is nog very efficient when rearranging large lists
   -- possible solutions: use a floating point or alphanumeric position; or a linked list
+  -- https://brunoscheufler.com/blog/2022-09-26-building-sortable-relations-with-postgresql
+  -- https://stackoverflow.com/questions/9536262/best-representation-of-an-ordered-list-in-a-database
+  -- https://stackoverflow.com/questions/38923376/return-a-new-string-that-sorts-between-two-given-strings/38927158#38927158
   position INT NOT NULL,
   -- TODO uniqueness only makes sense if we don't introduce relation attributes
   UNIQUE (from_id, to_id, name)

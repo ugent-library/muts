@@ -27,11 +27,19 @@ BEGIN
         NEW.record_id,
         op->'args'->>'to',
         op->'args'->>'name',
-        (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND to_id = op->'args'->>'to' AND name = op->'args'->>'name')
+        (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND name = op->'args'->>'name')
       );
 
     WHEN 'del-rel' THEN
-      DELETE FROM relations WHERE from_id = NEW.record_id AND to_id = op->'args'->>'to' AND name = op->'args'->>'name';
+      WITH del_rel AS (
+        DELETE FROM relations
+        WHERE from_id = NEW.record_id AND to_id = op->'args'->>'to' AND name = op->'args'->>'name'
+        RETURNING position
+      )
+      UPDATE relations r
+      SET position = r.position - 1
+      FROM del_rel
+      WHERE from_id = NEW.record_id AND name = op->'args'->>'name' AND r.position > del_rel.position;
   
     ELSE
       RAISE EXCEPTION 'Unknown operation "%"', op->>'name';
