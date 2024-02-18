@@ -11,38 +11,60 @@ type Mut struct {
 
 // TODO make ops opaque
 type Op struct {
-	Name string         `json:"name"`
-	Args map[string]any `json:"args,omitempty"`
+	Name string `json:"name"`
+	Args any    `json:"args,omitempty"`
 }
 
-func AddRec(kind string, attrs map[string]any) Op {
-	args := map[string]any{"kind": kind}
-	if attrs != nil {
-		args["attrs"] = attrs
-	}
-	return Op{Name: "add-rec", Args: args}
+func AddRec(kind string, attrs any) Op {
+	return Op{Name: "add-rec", Args: struct {
+		Kind  string `json:"kind"`
+		Attrs any    `json:"attrs,omitempty"`
+	}{
+		Kind:  kind,
+		Attrs: attrs,
+	}}
 }
 
 func SetAttr(key string, val any) Op {
-	return Op{Name: "set-attr", Args: map[string]any{"key": key, "val": val}}
+	return Op{Name: "set-attr", Args: struct {
+		Key string `json:"key"`
+		Val any    `json:"val"`
+	}{
+		Key: key,
+		Val: val,
+	}}
 }
 
 func DelAttr(key string) Op {
-	return Op{Name: "del-attr", Args: map[string]any{"key": key}}
+	return Op{Name: "del-attr", Args: struct {
+		Key string `json:"key"`
+	}{
+		Key: key,
+	}}
 }
 
 func ClearAttrs() Op {
 	return Op{Name: "clear-attrs"}
 }
 
-func AddRel(kind, to string, attrs map[string]any) Op {
-	args := map[string]any{"id": ulid.Make().String(), "kind": kind, "to": to}
-	if attrs != nil {
-		args["attrs"] = attrs
-	}
-	return Op{Name: "add-rel", Args: args}
+func AddRel(kind, to string, attrs any) Op {
+	return Op{Name: "add-rel", Args: struct {
+		ID    string `json:"id"`
+		Kind  string `json:"kind"`
+		To    string `json:"to"`
+		Attrs any    `json:"attrs,omitempty"`
+	}{
+		ID:    ulid.Make().String(),
+		Kind:  kind,
+		To:    to,
+		Attrs: attrs,
+	}}
 }
 
 func DelRel(id string) Op {
-	return Op{Name: "del-rel", Args: map[string]any{"id": id}}
+	return Op{Name: "del-rel", Args: struct {
+		ID string `json:"id"`
+	}{
+		ID: id,
+	}}
 }
