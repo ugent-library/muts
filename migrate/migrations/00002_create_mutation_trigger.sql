@@ -13,34 +13,50 @@ BEGIN
     CASE op->>'name'
  
     WHEN 'add-rec' THEN
-      INSERT INTO records (id, type) VALUES (NEW.record_id, (op->'args'->>'type')::ltree);
-
-    WHEN 'add-attr' THEN
-      INSERT INTO attributes (record_id, name, value) VALUES (NEW.record_id, (op->'args'->>'name')::ltree, op->'args'->>'value');
-
-    WHEN 'del-attrs' THEN
-      DELETE FROM attributes WHERE record_id = NEW.record_id;
-
-    WHEN 'add-rel' THEN
-      INSERT INTO relations (from_id, to_id, name, position)
+      INSERT INTO records (id, kind, attributes)
       VALUES (
         NEW.record_id,
+        (op->'args'->>'kind')::ltree,
+        coalesce(op->'args'->'attrs', '{}'::jsonb)
+      );
+
+    WHEN 'set-attr' THEN
+      UPDATE records
+      SET attributes = attributes || jsonb_build_object(op->'args'->>'key', op->'args'->'val')
+      WHERE id = NEW.record_id;
+
+    WHEN 'del-attr' THEN
+      UPDATE records
+      SET attributes = attributes - op->'args'->>'key'
+      WHERE id = NEW.record_id;
+
+    WHEN 'clear-attrs' THEN
+      UPDATE records
+      SET attributes = '{}'::jsonb
+      WHERE id = NEW.record_id;
+
+    WHEN 'add-rel' THEN
+      INSERT INTO relations (id, from_id, to_id, kind, position, attributes)
+      VALUES (
+        op->'args'->>'id',
+        NEW.record_id,
         op->'args'->>'to',
-        op->'args'->>'name',
-        (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND name = op->'args'->>'name')
+        (op->'args'->>'kind')::ltree,
+        (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND kind = (op->'args'->>'kind')::ltree),
+        coalesce(op->'args'->'attrs', '{}'::jsonb)
       );
 
     WHEN 'del-rel' THEN
-      WITH del_rel AS (
+      WITH rel AS (
         DELETE FROM relations
-        WHERE from_id = NEW.record_id AND to_id = op->'args'->>'to' AND name = op->'args'->>'name'
-        RETURNING position
+        WHERE id = op->'args'->>'id'
+        RETURNING kind, position
       )
       UPDATE relations r
       SET position = r.position - 1
-      FROM del_rel
-      WHERE from_id = NEW.record_id AND name = op->'args'->>'name' AND r.position > del_rel.position;
-  
+      FROM rel
+      WHERE from_id = NEW.record_id AND r.kind = rel.kind AND r.position > rel.position;
+
     ELSE
       RAISE EXCEPTION 'Unknown operation "%"', op->>'name';
 

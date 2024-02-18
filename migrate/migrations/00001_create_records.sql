@@ -2,53 +2,50 @@
 
 CREATE EXTENSION IF NOT EXISTS ltree;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS btree_gin;
 
 CREATE TABLE records (
-  id TEXT PRIMARY KEY,
-  type ltree
+  id TEXT PRIMARY KEY CHECK (id <> ''),
+  kind LTREE NOT NULL CHECK (kind <> ''),
+  attributes JSONB NOT NULL
 );
 
-CREATE INDEX records_type_gist_idx ON records USING GIST (type);
+CREATE INDEX records_kind_gist_idx ON records USING gist (kind);
+CREATE INDEX records_attributes_gist_idx ON records USING gin (attributes jsonb_path_ops);
 
-CREATE TABLE attributes (
-  record_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
-  name LTREE NOT NULL CHECK (name <> ''),
-  value TEXT NOT NULL CHECK (value <> '')
-);
-
-CREATE INDEX attributes_record_id_fkey ON attributes (record_id);
-CREATE INDEX attributes_name_gist_idx ON attributes USING GIST (name);
-CREATE INDEX attributes_value_gist_idx ON attributes USING GIST (value);
-
+-- TODO using an int position is not very efficient when rearranging large lists
+-- possible solutions: use a floating point or alphanumeric position; or a linked list
+-- https://stackoverflow.com/questions/9536262/best-representation-of-an-ordered-list-in-a-database
+-- https://stackoverflow.com/questions/38923376/return-a-new-string-that-sorts-between-two-given-strings/38927158#38927158
 CREATE TABLE relations (
+  id TEXT PRIMARY KEY CHECK (id <> ''),
   from_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
   to_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
-  name TEXT NOT NULL CHECK (name <> ''),
-  -- TODO using an int position is not very efficient when rearranging large lists
-  -- possible solutions: use a floating point or alphanumeric position; or a linked list
-  -- https://stackoverflow.com/questions/9536262/best-representation-of-an-ordered-list-in-a-database
-  -- https://stackoverflow.com/questions/38923376/return-a-new-string-that-sorts-between-two-given-strings/38927158#38927158
+  kind LTREE NOT NULL CHECK (kind <> ''),
   position INT NOT NULL,
-  -- TODO uniqueness only makes sense if we don't introduce relation attributes
-  UNIQUE (from_id, to_id, name)
+  attributes JSONB NOT NULL
 );
+
+CREATE INDEX relations_from_id_fkey ON relations (from_id);
+CREATE INDEX relations_to_id_fkey ON relations (to_id);
+CREATE INDEX relations_kind_gist_idx ON relations USING gist (kind);
+CREATE INDEX relations_position_idx ON relations (position);
+CREATE INDEX relations_attributes_gist_idx ON relations USING gin (attributes jsonb_path_ops);
 
 CREATE TABLE mutations (
-  id TEXT PRIMARY KEY,
-  record_id TEXT NOT NULL,
-  author TEXT NOT NULL,
+  id TEXT PRIMARY KEY CHECK (id <> ''),
+  record_id TEXT NOT NULL CHECK (record_id <> ''),
+  author TEXT NOT NULL CHECK (author <> ''),
   reason TEXT,
-  -- ops JSONB NOT NULL CHECK (jsonb_typeof(ops) = 'array' AND jsonb_array_length(ops) > 0),
-  ops JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+  ops JSONB NOT NULL
+  -- ts TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 
-CREATE INDEX mutations_record_id_fkey ON mutations (record_id);
-CREATE INDEX mutations_created_at_key ON mutations (created_at);
+-- CREATE INDEX mutations_record_id_fkey ON mutations (record_id);
+-- CREATE INDEX mutations_ts_key ON mutations (ts);
 
 -- +goose Down
 
+DROP TABLE relations CASCADE;
 DROP TABLE records CASCADE;
 DROP TABLE mutations CASCADE;
-DROP TABLE attributes CASCADE;
-DROP TABLE relations CASCADE;

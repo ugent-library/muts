@@ -1,5 +1,7 @@
 package store
 
+import "github.com/oklog/ulid/v2"
+
 type Mut struct {
 	RecordID string
 	Author   string
@@ -7,29 +9,40 @@ type Mut struct {
 	Ops      []Op
 }
 
+// TODO make ops opaque
 type Op struct {
-	Name string `json:"name"`
-	Args Args   `json:"args,omitempty"`
+	Name string         `json:"name"`
+	Args map[string]any `json:"args,omitempty"`
 }
 
-type Args = map[string]string
-
-func AddRec(recType string) Op {
-	return Op{Name: "add-rec", Args: Args{"type": recType}}
+func AddRec(kind string, attrs map[string]any) Op {
+	args := map[string]any{"kind": kind}
+	if attrs != nil {
+		args["attrs"] = attrs
+	}
+	return Op{Name: "add-rec", Args: args}
 }
 
-func AddAttr(name, value string) Op {
-	return Op{Name: "add-attr", Args: Args{"name": name, "value": value}}
+func SetAttr(key string, val any) Op {
+	return Op{Name: "set-attr", Args: map[string]any{"key": key, "val": val}}
 }
 
-func DelAttrs() Op {
-	return Op{Name: "del-attrs"}
+func DelAttr(key string) Op {
+	return Op{Name: "del-attr", Args: map[string]any{"key": key}}
 }
 
-func AddRel(name, to string) Op {
-	return Op{Name: "add-rel", Args: Args{"name": name, "to": to}}
+func ClearAttrs() Op {
+	return Op{Name: "clear-attrs"}
 }
 
-func DelRel(name, to string) Op {
-	return Op{Name: "del-rel", Args: Args{"name": name, "to": to}}
+func AddRel(kind, to string, attrs map[string]any) Op {
+	args := map[string]any{"id": ulid.Make().String(), "kind": kind, "to": to}
+	if attrs != nil {
+		args["attrs"] = attrs
+	}
+	return Op{Name: "add-rel", Args: args}
+}
+
+func DelRel(id string) Op {
+	return Op{Name: "del-rel", Args: map[string]any{"id": id}}
 }

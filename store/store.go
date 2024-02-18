@@ -33,6 +33,10 @@ func (s *Store) Mutate(ctx context.Context, muts ...Mut) error {
 		if err != nil {
 			return err
 		}
+		row := []any{ulid.Make().String(), mut.RecordID, mut.Author, nil, ops}
+		if mut.Reason != "" {
+			row[3] = mut.Reason
+		}
 		rows = append(rows, []any{ulid.Make().String(), mut.RecordID, mut.Author, mut.Reason, ops})
 	}
 

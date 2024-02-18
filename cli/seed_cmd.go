@@ -23,8 +23,8 @@ var seedCmd = &cobra.Command{
 		}
 
 		bookID := ulid.Make().String()
-		author1ID := ulid.Make().String()
-		author2ID := ulid.Make().String()
+		person1ID := ulid.Make().String()
+		person2ID := ulid.Make().String()
 		chapterID := ulid.Make().String()
 
 		return s.Mutate(context.Background(),
@@ -32,36 +32,37 @@ var seedCmd = &cobra.Command{
 				RecordID: bookID,
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Publication.Book"),
-					store.AddAttr("title.eng", "A treatise on nonsense"),
+					store.AddRec("Publication.Book", map[string]any{
+						"title": map[string]string{"eng": "A treatise on nonsense"},
+					}),
 				},
 			},
 			store.Mut{
-				RecordID: author1ID,
+				RecordID: person1ID,
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Contributor"),
-					store.AddAttr("name", "Mr. Whimsi"),
+					store.AddRec("Person", nil),
+					// store.SetAttr("name", "Mr. Whimsi"),
 				},
 			},
 			store.Mut{
-				RecordID: author2ID,
+				RecordID: person2ID,
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Contributor"),
-					store.AddAttr("name", "Mr. Floppy"),
+					store.AddRec("Person", nil),
+					store.SetAttr("name", "Mr. Floppy"),
 				},
 			},
 			store.Mut{
 				RecordID: chapterID,
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Publication.Chapter"),
-					store.AddAttr("title.eng", "Nonsensical introduction"),
-					store.AddRel("partOf", bookID),
-					store.AddRel("hasAuthor", author1ID),
-					store.AddRel("hasFirstAuthor", author1ID),
-					store.AddRel("hasAuthor", author2ID),
+					store.AddRec("Publication.Chapter", nil),
+					store.SetAttr("title", "Nonsensical introduction"),
+					store.AddRel("PartOf", bookID, nil),
+					store.AddRel("Contribution.Author", person1ID, nil),
+					store.AddRel("Contribution.Author", person2ID, nil),
+					store.AddRel("Contribution.FirstAuthor", person2ID, nil),
 				},
 			},
 		)
