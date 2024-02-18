@@ -13,26 +13,28 @@ BEGIN
     CASE op->>'name'
  
     WHEN 'add-rec' THEN
-      INSERT INTO records (id, kind, attributes)
+      INSERT INTO records (id, kind, attributes, created_at, updated_at)
       VALUES (
         NEW.record_id,
         (op->'args'->>'kind')::ltree,
-        coalesce(op->'args'->'attrs', '{}'::jsonb)
+        coalesce(op->'args'->'attrs', '{}'::jsonb),
+        NEW.created_at,
+        NEW.created_at
       );
 
     WHEN 'set-attr' THEN
       UPDATE records
-      SET attributes = attributes || jsonb_build_object(op->'args'->>'key', op->'args'->'val')
+      SET attributes = attributes || jsonb_build_object(op->'args'->>'key', op->'args'->'val'), updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
     WHEN 'del-attr' THEN
       UPDATE records
-      SET attributes = attributes - op->'args'->>'key'
+      SET attributes = attributes - op->'args'->>'key', updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
     WHEN 'clear-attrs' THEN
       UPDATE records
-      SET attributes = '{}'::jsonb
+      SET attributes = '{}'::jsonb, updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
     WHEN 'add-rel' THEN
@@ -46,6 +48,10 @@ BEGIN
         coalesce(op->'args'->'attrs', '{}'::jsonb)
       );
 
+      UPDATE records
+      SET updated_at = NEW.created_at
+      WHERE id = NEW.record_id;
+
     WHEN 'del-rel' THEN
       WITH rel AS (
         DELETE FROM relations
@@ -56,6 +62,10 @@ BEGIN
       SET position = r.position - 1
       FROM rel
       WHERE from_id = NEW.record_id AND r.kind = rel.kind AND r.position > rel.position;
+
+      UPDATE records
+      SET updated_at = NEW.created_at
+      WHERE id = NEW.record_id;
 
     ELSE
       RAISE EXCEPTION 'Unknown operation "%"', op->>'name';

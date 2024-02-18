@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,6 +35,8 @@ type Rec struct {
 	Kind       string          `json:"kind"`
 	Attributes json.RawMessage `json:"attributes"`
 	Relations  []Rel           `json:"relations"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
 type Rel struct {
@@ -48,7 +51,9 @@ func (s *Store) GetRec(ctx context.Context, id string) (*Rec, error) {
 	SELECT records.id,
 	       records.kind,
 		   records.attributes,
-	       jsonb_agg(jsonb_build_object('id', r.id, 'kind', r.kind, 'to', r.to_id, 'attributes', r.attributes)) AS relations
+	       jsonb_agg(jsonb_build_object('id', r.id, 'kind', r.kind, 'to', r.to_id, 'attributes', r.attributes)) AS relations,
+		   records.created_at,
+		   records.updated_at
 	FROM records
 	LEFT JOIN relations r ON r.from_id = records.id
 	WHERE records.id = $1
@@ -56,7 +61,14 @@ func (s *Store) GetRec(ctx context.Context, id string) (*Rec, error) {
 	`
 
 	var rec Rec
-	err := s.pool.QueryRow(ctx, q, id).Scan(&rec.ID, &rec.Kind, &rec.Attributes, &rec.Relations)
+	err := s.pool.QueryRow(ctx, q, id).Scan(
+		&rec.ID,
+		&rec.Kind,
+		&rec.Attributes,
+		&rec.Relations,
+		&rec.CreatedAt,
+		&rec.UpdatedAt,
+	)
 	if err == pgx.ErrNoRows {
 		return nil, ErrNotFound
 	}

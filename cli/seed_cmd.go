@@ -66,6 +66,12 @@ var seedCmd = &cobra.Command{
 					store.AddRel("PartOf", bookID, nil),
 					store.AddRel("Contribution.Author", person1ID, nil),
 					store.AddRel("Contribution.Author", person2ID, nil),
+				},
+			},
+			store.Mut{
+				RecordID: chapterID,
+				Author:   "system",
+				Ops: []store.Op{
 					store.AddRel("Contribution.FirstAuthor", person2ID, nil),
 				},
 			},
