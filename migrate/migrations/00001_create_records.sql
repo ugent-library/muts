@@ -36,7 +36,7 @@ CREATE TABLE mutations (
   id TEXT PRIMARY KEY CHECK (id <> ''),
   record_id TEXT NOT NULL CHECK (record_id <> ''),
   author TEXT NOT NULL CHECK (author <> ''),
-  reason TEXT,
+  reason TEXT CHECK (reason <> ''),
   ops JSONB NOT NULL
   -- ts TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );

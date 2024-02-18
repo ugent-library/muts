@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
@@ -17,7 +19,9 @@ var seedCmd = &cobra.Command{
 	Short: "Seed the database",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		s, err := store.New(context.Background(), config.Store.Conn)
+		ctx := context.Background()
+
+		s, err := store.New(ctx, config.Store.Conn)
 		if err != nil {
 			return err
 		}
@@ -27,7 +31,7 @@ var seedCmd = &cobra.Command{
 		person2ID := ulid.Make().String()
 		chapterID := ulid.Make().String()
 
-		return s.Mutate(context.Background(),
+		err = s.Mutate(ctx,
 			store.Mut{
 				RecordID: bookID,
 				Author:   "system",
@@ -42,7 +46,7 @@ var seedCmd = &cobra.Command{
 				Author:   "system",
 				Ops: []store.Op{
 					store.AddRec("Person", nil),
-					// store.SetAttr("name", "Mr. Whimsi"),
+					store.SetAttr("name", "Mr. Whimsi"),
 				},
 			},
 			store.Mut{
@@ -66,5 +70,19 @@ var seedCmd = &cobra.Command{
 				},
 			},
 		)
+		if err != nil {
+			return err
+		}
+
+		rec, err := s.GetRec(ctx, chapterID)
+		if err != nil {
+			return err
+		}
+
+		j, _ := json.MarshalIndent(rec, "", "  ")
+
+		os.Stdout.Write(j)
+
+		return nil
 	},
 }
