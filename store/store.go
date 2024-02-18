@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oklog/ulid/v2"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -88,7 +87,6 @@ func (s *Store) Mutate(ctx context.Context, muts ...Mut) error {
 			return err
 		}
 		rows[i] = []any{
-			ulid.Make().String(),
 			mut.RecordID,
 			mut.Author,
 			pgtype.Text{Valid: mut.Reason != "", String: mut.Reason},
@@ -99,7 +97,7 @@ func (s *Store) Mutate(ctx context.Context, muts ...Mut) error {
 	_, err := s.pool.CopyFrom(
 		ctx,
 		pgx.Identifier{"mutations"},
-		[]string{"id", "record_id", "author", "reason", "ops"},
+		[]string{"record_id", "author", "reason", "ops"},
 		pgx.CopyFromRows(rows),
 	)
 

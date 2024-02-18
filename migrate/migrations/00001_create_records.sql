@@ -37,7 +37,7 @@ CREATE INDEX relations_attributes_gist_idx ON relations USING gin (attributes js
 -- TODO guarantee correct ordering through a monotonic version number
 -- or rely on ulid ordering?
 CREATE TABLE mutations (
-  id TEXT PRIMARY KEY CHECK (id <> ''),
+  id BIGSERIAL PRIMARY KEY,
   record_id TEXT NOT NULL CHECK (record_id <> ''),
   author TEXT NOT NULL CHECK (author <> ''),
   reason TEXT CHECK (reason <> ''),
@@ -45,7 +45,7 @@ CREATE TABLE mutations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp()
 );
 
-CREATE INDEX mutations_record_id_fkey ON mutations (record_id);
+CREATE INDEX mutations_record_id_key ON mutations (record_id);
 CREATE INDEX mutations_created_at_key ON mutations (created_at);
 
 -- +goose Down

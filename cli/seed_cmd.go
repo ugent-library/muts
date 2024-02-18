@@ -63,16 +63,16 @@ var seedCmd = &cobra.Command{
 				Ops: []store.Op{
 					store.AddRec("Publication.Chapter", nil),
 					store.SetAttr("title", "Nonsensical introduction"),
-					store.AddRel("PartOf", bookID, nil),
-					store.AddRel("Contribution.Author", person1ID, nil),
-					store.AddRel("Contribution.Author", person2ID, nil),
+					store.AddRel(ulid.Make().String(), "PartOf", bookID, nil),
+					store.AddRel(ulid.Make().String(), "Contribution.Author", person1ID, nil),
+					store.AddRel(ulid.Make().String(), "Contribution.Author", person2ID, nil),
 				},
 			},
 			store.Mut{
 				RecordID: chapterID,
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRel("Contribution.FirstAuthor", person2ID, nil),
+					store.AddRel(ulid.Make().String(), "Contribution.FirstAuthor", person2ID, nil),
 				},
 			},
 		)

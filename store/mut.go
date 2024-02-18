@@ -1,7 +1,5 @@
 package store
 
-import "github.com/oklog/ulid/v2"
-
 type Mut struct {
 	RecordID string
 	Author   string
@@ -47,14 +45,14 @@ func ClearAttrs() Op {
 	return Op{Name: "clear-attrs"}
 }
 
-func AddRel(kind, to string, attrs any) Op {
+func AddRel(id, kind, to string, attrs any) Op {
 	return Op{Name: "add-rel", Args: struct {
 		ID    string `json:"id"`
 		Kind  string `json:"kind"`
 		To    string `json:"to"`
 		Attrs any    `json:"attrs,omitempty"`
 	}{
-		ID:    ulid.Make().String(),
+		ID:    id,
 		Kind:  kind,
 		To:    to,
 		Attrs: attrs,
