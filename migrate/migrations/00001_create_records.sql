@@ -42,7 +42,7 @@ CREATE TABLE mutations (
   author TEXT NOT NULL CHECK (author <> ''),
   reason TEXT CHECK (reason <> ''),
   ops JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp()
 );
 
 CREATE INDEX mutations_record_id_fkey ON mutations (record_id);
