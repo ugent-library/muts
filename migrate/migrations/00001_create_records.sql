@@ -13,7 +13,7 @@ CREATE TABLE records (
 );
 
 CREATE INDEX records_kind_gist_idx ON records USING gist (kind);
-CREATE INDEX records_attributes_gist_idx ON records USING gin (attributes jsonb_path_ops);
+CREATE INDEX records_attributes_gin_idx ON records USING gin (attributes jsonb_path_ops);
 
 -- TODO using an int position is not very efficient when rearranging large lists
 -- possible solutions: use a floating point or alphanumeric position, or a linked list
@@ -32,7 +32,7 @@ CREATE INDEX relations_from_id_fkey ON relations (from_id);
 CREATE INDEX relations_to_id_fkey ON relations (to_id);
 CREATE INDEX relations_kind_gist_idx ON relations USING gist (kind);
 CREATE INDEX relations_position_idx ON relations (position);
-CREATE INDEX relations_attributes_gist_idx ON relations USING gin (attributes jsonb_path_ops);
+CREATE INDEX relations_attributes_gin_idx ON relations USING gin (attributes jsonb_path_ops);
 
 -- TODO guarantee correct ordering through a monotonic version number
 -- or rely on ulid ordering?
