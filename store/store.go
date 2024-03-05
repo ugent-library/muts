@@ -77,6 +77,45 @@ func (s *Store) GetRec(ctx context.Context, id string) (*Rec, error) {
 	return &rec, nil
 }
 
+func (s *Store) EachRec(ctx context.Context, fn func(*Rec) bool) error {
+	q := `
+	SELECT records.id,
+	       records.kind,
+		   records.attributes,
+	       jsonb_agg(jsonb_build_object('id', r.id, 'kind', r.kind, 'to', r.to_id, 'attributes', r.attributes)) AS relations,
+		   records.created_at,
+		   records.updated_at
+	FROM records
+	LEFT JOIN relations r ON r.from_id = records.id
+	GROUP BY records.id;
+	`
+
+	rows, err := s.pool.Query(ctx, q)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rec Rec
+		err := rows.Scan(
+			&rec.ID,
+			&rec.Kind,
+			&rec.Attributes,
+			&rec.Relations,
+			&rec.CreatedAt,
+			&rec.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+		if !fn(&rec) {
+			break
+		}
+	}
+
+	return nil
+}
+
 // TODO optimistic locking
 func (s *Store) Mutate(ctx context.Context, muts ...Mut) error {
 	rows := make([][]any, len(muts))
