@@ -38,15 +38,44 @@ BEGIN
       WHERE id = NEW.record_id;
 
     WHEN 'add-rel' THEN
-      INSERT INTO relations (id, from_id, to_id, kind, position, attributes)
+      INSERT INTO relations (id, kind, from_id, to_id, position, attributes, created_at, updated_at)
       VALUES (
         op->'args'->>'id',
+        (op->'args'->>'kind')::ltree,
         NEW.record_id,
         op->'args'->>'to',
-        (op->'args'->>'kind')::ltree,
         (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND kind = (op->'args'->>'kind')::ltree),
-        coalesce(op->'args'->'attrs', '{}'::jsonb)
+        coalesce(op->'args'->'attrs', '{}'::jsonb),
+        NEW.created_at,
+        NEW.created_at
       );
+
+      UPDATE records
+      SET updated_at = NEW.created_at
+      WHERE id = NEW.record_id;
+
+    WHEN 'set-rel-attr' THEN
+      UPDATE relations
+      SET attributes = attributes || jsonb_build_object(op->'args'->>'key', op->'args'->'val'), updated_at = NEW.created_at
+      WHERE id = op->'args'->>'id';
+
+      UPDATE records
+      SET updated_at = NEW.created_at
+      WHERE id = NEW.record_id;
+
+    WHEN 'del-rel-attr' THEN
+      UPDATE relations
+      SET attributes = attributes - op->'args'->>'key', updated_at = NEW.created_at
+      WHERE id = op->'args'->>'id';
+
+      UPDATE records
+      SET updated_at = NEW.created_at
+      WHERE id = NEW.record_id;
+
+    WHEN 'clear-rel-attrs' THEN
+      UPDATE relations
+      SET attributes = '{}'::jsonb, updated_at = NEW.created_at
+      WHERE id = op->'args'->>'id';
 
       UPDATE records
       SET updated_at = NEW.created_at

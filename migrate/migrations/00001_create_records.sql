@@ -21,11 +21,13 @@ CREATE INDEX records_attributes_gin_idx ON records USING gin (attributes jsonb_p
 -- https://stackoverflow.com/questions/38923376/return-a-new-string-that-sorts-between-two-given-strings/38927158#38927158
 CREATE TABLE relations (
   id TEXT PRIMARY KEY CHECK (id <> ''),
+  kind LTREE NOT NULL CHECK (kind <> ''),
   from_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
   to_id TEXT NOT NULL REFERENCES records (id) ON DELETE CASCADE,
-  kind LTREE NOT NULL CHECK (kind <> ''),
   position INT NOT NULL,
-  attributes JSONB NOT NULL
+  attributes JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX relations_from_id_fkey ON relations (from_id);
