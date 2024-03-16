@@ -82,9 +82,9 @@ var seedCmd = &cobra.Command{
 			return err
 		}
 
-		rec, err := s.Rec().Get(ctx, chapterID)
+		// rec, err := s.Rec().Get(ctx, chapterID)
 		// rec, err := s.Rec().WithRels().Get(ctx, chapterID)
-		// rec, err := s.Rec().WithRecs().Get(ctx, chapterID)
+		rec, err := s.Rec().WithRelRecs().Get(ctx, chapterID)
 		if err != nil {
 			return err
 		}
