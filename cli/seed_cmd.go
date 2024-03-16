@@ -65,7 +65,9 @@ var seedCmd = &cobra.Command{
 					store.SetAttr("title", "Nonsensical introduction"),
 					store.AddRel(ulid.Make().String(), "PartOf", bookID, nil),
 					store.AddRel(ulid.Make().String(), "Contribution.Author", person1ID, nil),
-					store.AddRel(ulid.Make().String(), "Contribution.Author", person2ID, nil),
+					store.AddRel(ulid.Make().String(), "Contribution.Author", person2ID, map[string]any{
+						"creditRole": "firstAuthor",
+					}),
 				},
 			},
 			store.Mut{
@@ -80,7 +82,9 @@ var seedCmd = &cobra.Command{
 			return err
 		}
 
-		rec, err := s.GetRec(ctx, chapterID)
+		rec, err := s.Rec().Get(ctx, chapterID)
+		// rec, err := s.Rec().WithRels().Get(ctx, chapterID)
+		// rec, err := s.Rec().WithRecs().Get(ctx, chapterID)
 		if err != nil {
 			return err
 		}
