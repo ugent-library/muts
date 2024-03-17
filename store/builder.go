@@ -11,15 +11,16 @@ import (
 )
 
 type Builder struct {
-	store        *Store
-	withRels     bool
-	withRelRecs  bool
-	idEq         string
-	kindEq       string
-	kindMatches  string
-	hasAttr      []string
-	attrContains []map[string]any
-	relKindEq    string
+	store          *Store
+	withRels       bool
+	withRelRecs    bool
+	idEq           string
+	kindEq         string
+	kindMatches    string
+	hasAttr        []string
+	attrContains   []map[string]any
+	relKindEq      string
+	relKindMatches string
 }
 
 func (b Builder) WithRels() Builder {
@@ -56,6 +57,12 @@ func (b Builder) AttrContains(key string, val any) Builder {
 // TOOD should be in own Rel() builder so we can test each rel on multiple conditions
 func (b Builder) RelKind(kind string) Builder {
 	b.relKindEq = kind
+	return b
+}
+
+// TOOD should be in own Rel() builder so we can test each rel on multiple conditions
+func (b Builder) RelKindMatches(kind string) Builder {
+	b.relKindMatches() = kind
 	return b
 }
 
@@ -159,6 +166,11 @@ func (b Builder) buildQuery() (string, []any, error) {
 		i++
 		relPreds = append(relPreds, fmt.Sprintf(`rl.kind = $%d`, i))
 		args = append(args, b.relKindEq)
+	}
+	if b.relKindMatches != "" {
+		i++
+		relPreds = append(relPreds, fmt.Sprintf(`rl.kind ~ $%d`, i))
+		args = append(args, b.relKindMatches)
 	}
 
 	vars := map[string]any{
