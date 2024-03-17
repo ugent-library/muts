@@ -4,23 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type Builder struct {
-	store          *Store
-	withRels       bool
-	withRelRecs    bool
-	idEq           string
-	kindEq         string
-	kindMatches    string
-	hasAttr        []string
-	attrContains   []map[string]any
-	relKindEq      string
-	relKindMatches string
+	store       *Store
+	withRels    bool
+	withRelRecs bool
+	filters     []string
+	relFilters  []string
+	args        []any
 }
 
 func (b Builder) WithRels() Builder {
@@ -35,46 +30,79 @@ func (b Builder) WithRelRecs() Builder {
 }
 
 func (b Builder) Kind(kind string) Builder {
-	b.kindEq = kind
+	i := len(b.args) + 1
+	b.filters = append(b.filters, fmt.Sprintf(`r.kind = $%d`, i))
+	b.args = append(b.args, kind)
 	return b
 }
 
 func (b Builder) KindMatches(kind string) Builder {
-	b.kindMatches = kind
+	i := len(b.args) + 1
+	b.filters = append(b.filters, fmt.Sprintf(`r.kind ~ $%d`, i))
+	b.args = append(b.args, kind)
 	return b
 }
 
 func (b Builder) HasAttr(key string) Builder {
-	b.hasAttr = append(b.hasAttr, key)
+	i := len(b.args) + 1
+	b.filters = append(b.filters, fmt.Sprintf(`r.attributes ? $%d`, i))
+	b.args = append(b.args, key)
 	return b
 }
 
+// TODO handle error
 func (b Builder) AttrContains(key string, val any) Builder {
-	b.attrContains = append(b.attrContains, map[string]any{key: val})
+	j, _ := json.Marshal(map[string]any{key: val})
+	i := len(b.args) + 1
+	b.filters = append(b.filters, fmt.Sprintf(`r.attributes @> $%d::jsonb`, i))
+	b.args = append(b.args, string(j))
 	return b
 }
 
 // TOOD should be in own Rel() builder so we can test each rel on multiple conditions
 func (b Builder) RelKind(kind string) Builder {
-	b.relKindEq = kind
+	i := len(b.args) + 1
+	b.relFilters = append(b.relFilters, fmt.Sprintf(`rl.kind = $%d`, i))
+	b.args = append(b.args, kind)
 	return b
 }
 
 // TOOD should be in own Rel() builder so we can test each rel on multiple conditions
 func (b Builder) RelKindMatches(kind string) Builder {
-	b.relKindMatches = kind
+	i := len(b.args) + 1
+	b.relFilters = append(b.relFilters, fmt.Sprintf(`rl.kind ~ $%d`, i))
+	b.args = append(b.args, kind)
 	return b
 }
 
-func (b Builder) Get(ctx context.Context, id string) (*Rec, error) {
-	b.idEq = id
-	q, args, err := b.buildQuery()
-	if err != nil {
-		return nil, err
-	}
+// TOOD should be in own Rel() builder so we can test each rel on multiple conditions
+func (b Builder) RelHasAttr(key string) Builder {
+	i := len(b.args) + 1
+	b.relFilters = append(b.relFilters, fmt.Sprintf(`rl.attributes ? $%d`, i))
+	b.args = append(b.args, key)
+	return b
+}
 
+// TODO handle error
+// TOOD should be in own Rel() builder so we can test each rel on multiple conditions
+func (b Builder) RelAttrContains(key string, val any) Builder {
+	j, _ := json.Marshal(map[string]any{key: val})
+	i := len(b.args) + 1
+	b.relFilters = append(b.relFilters, fmt.Sprintf(`rl.attributes @> $%d::jsonb`, i))
+	b.args = append(b.args, string(j))
+	return b
+}
+
+func (b Builder) ID(id string) Builder {
+	i := len(b.args) + 1
+	b.filters = append(b.filters, fmt.Sprintf(`r.id = $%d`, i))
+	b.args = append(b.args, id)
+	return b
+}
+
+func (b Builder) One(ctx context.Context) (*Rec, error) {
 	var rec Rec
-	err = b.store.pool.QueryRow(ctx, q, args...).Scan(
+	err := b.store.pool.QueryRow(ctx, b.Query(), b.args...).Scan(
 		&rec.ID,
 		&rec.Kind,
 		&rec.Attrs,
@@ -92,14 +120,7 @@ func (b Builder) Get(ctx context.Context, id string) (*Rec, error) {
 }
 
 func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
-	q, args, err := b.buildQuery()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("query: %s", q)
-
-	rows, err := b.store.pool.Query(ctx, q, args...)
+	rows, err := b.store.pool.Query(ctx, b.Query(), b.args...)
 	if err != nil {
 		return err
 	}
@@ -125,85 +146,38 @@ func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
 	return nil
 }
 
-func (b Builder) buildQuery() (string, []any, error) {
-	var args []any
-	var preds []string
-	var relPreds []string
-	var i int
-
-	if b.idEq != "" {
-		i++
-		preds = append(preds, fmt.Sprintf(`r.id = $%d`, i))
-		args = append(args, b.idEq)
-	}
-	if b.kindEq != "" {
-		i++
-		preds = append(preds, fmt.Sprintf(`r.kind = $%d`, i))
-		args = append(args, b.kindEq)
-	}
-	if b.kindMatches != "" {
-		i++
-		preds = append(preds, fmt.Sprintf(`r.kind ~ $%d`, i))
-		args = append(args, b.kindMatches)
-	}
-	for _, pred := range b.hasAttr {
-		i++
-		preds = append(preds, fmt.Sprintf(`r.attributes ? $%d`, i))
-		args = append(args, pred)
-	}
-	for _, pred := range b.attrContains {
-		i++
-		preds = append(preds, fmt.Sprintf(`r.attributes @> $%d::jsonb`, i))
-
-		j, err := json.Marshal(pred)
-		if err != nil {
-			return "", nil, err
-		}
-		args = append(args, string(j))
-	}
-
-	if b.relKindEq != "" {
-		i++
-		relPreds = append(relPreds, fmt.Sprintf(`rl.kind = $%d`, i))
-		args = append(args, b.relKindEq)
-	}
-	if b.relKindMatches != "" {
-		i++
-		relPreds = append(relPreds, fmt.Sprintf(`rl.kind ~ $%d`, i))
-		args = append(args, b.relKindMatches)
-	}
-
+func (b Builder) Query() string {
 	vars := map[string]any{
 		"relField": qNullField,
 	}
 
 	if b.withRels {
-		relFieldVars := map[string]any{}
+		relVars := map[string]any{}
 		if b.withRelRecs {
-			relFieldVars["recField"] = qRecField
+			relVars["recField"] = qRecField
 			vars["recJoin"] = qRecJoin
 		}
 		vars["relJoin"] = qRelJoin
 		vars["relGroup"] = qRelGroup
-		vars["relField"] = b.store.relFieldTmpl.ExecuteString(relFieldVars)
+		vars["relField"] = b.store.relFieldTmpl.ExecuteString(relVars)
 	}
-	if len(relPreds) > 0 {
-		vars["relWhere"] = `JOIN relations rl ON rl.from_id = r.id AND ` + strings.Join(relPreds, ` AND `)
+	if len(b.filters) > 0 {
+		vars["where"] = ` WHERE ` + strings.Join(b.filters, ` AND `)
 	}
-	if len(preds) > 0 {
-		vars["where"] = ` WHERE ` + strings.Join(preds, ` AND `)
+	if len(b.relFilters) > 0 {
+		vars["relWhere"] = `JOIN relations rl ON rl.from_id = r.id AND ` + strings.Join(b.relFilters, ` AND `)
 	}
 
-	return b.store.selectTmpl.ExecuteString(vars), args, nil
+	return b.store.selectTmpl.ExecuteString(vars)
 }
 
 const qSelect = `
 SELECT r.id,
-	  r.kind,
-	  r.attributes,
-	  {{relField}}
-	  r.created_at,
-	  r.updated_at
+       r.kind,
+	   r.attributes,
+	   {{relField}}
+	   r.created_at,
+	   r.updated_at
 FROM records r
 {{relWhere}}
 {{relJoin}}
