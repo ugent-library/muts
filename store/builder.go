@@ -62,7 +62,7 @@ func (b Builder) RelKind(kind string) Builder {
 
 // TOOD should be in own Rel() builder so we can test each rel on multiple conditions
 func (b Builder) RelKindMatches(kind string) Builder {
-	b.relKindMatches() = kind
+	b.relKindMatches = kind
 	return b
 }
 
