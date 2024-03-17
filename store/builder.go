@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,7 @@ type Builder struct {
 	kindMatches  string
 	hasAttr      []string
 	attrContains []map[string]any
+	relKindEq    string
 }
 
 func (b Builder) WithRels() Builder {
@@ -48,6 +50,12 @@ func (b Builder) HasAttr(key string) Builder {
 
 func (b Builder) AttrContains(key string, val any) Builder {
 	b.attrContains = append(b.attrContains, map[string]any{key: val})
+	return b
+}
+
+// TOOD should be in own Rel() builder so we can test each rel on multiple conditions
+func (b Builder) RelKind(kind string) Builder {
+	b.relKindEq = kind
 	return b
 }
 
@@ -82,6 +90,8 @@ func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
 		return err
 	}
 
+	log.Printf("query: %s", q)
+
 	rows, err := b.store.pool.Query(ctx, q, args...)
 	if err != nil {
 		return err
@@ -111,31 +121,32 @@ func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
 func (b Builder) buildQuery() (string, []any, error) {
 	var args []any
 	var preds []string
+	var relPreds []string
 	var i int
 
 	if b.idEq != "" {
 		i++
-		preds = append(preds, fmt.Sprintf(`records.id = $%d`, i))
+		preds = append(preds, fmt.Sprintf(`r.id = $%d`, i))
 		args = append(args, b.idEq)
 	}
 	if b.kindEq != "" {
 		i++
-		preds = append(preds, fmt.Sprintf(`records.kind = $%d`, i))
+		preds = append(preds, fmt.Sprintf(`r.kind = $%d`, i))
 		args = append(args, b.kindEq)
 	}
 	if b.kindMatches != "" {
 		i++
-		preds = append(preds, fmt.Sprintf(`records.kind ~ $%d`, i))
+		preds = append(preds, fmt.Sprintf(`r.kind ~ $%d`, i))
 		args = append(args, b.kindMatches)
 	}
 	for _, pred := range b.hasAttr {
 		i++
-		preds = append(preds, fmt.Sprintf(`records.attributes ? $%d`, i))
+		preds = append(preds, fmt.Sprintf(`r.attributes ? $%d`, i))
 		args = append(args, pred)
 	}
 	for _, pred := range b.attrContains {
 		i++
-		preds = append(preds, fmt.Sprintf(`records.attributes @> $%d::jsonb`, i))
+		preds = append(preds, fmt.Sprintf(`r.attributes @> $%d::jsonb`, i))
 
 		j, err := json.Marshal(pred)
 		if err != nil {
@@ -144,9 +155,16 @@ func (b Builder) buildQuery() (string, []any, error) {
 		args = append(args, string(j))
 	}
 
+	if b.relKindEq != "" {
+		i++
+		relPreds = append(relPreds, fmt.Sprintf(`rl.kind = $%d`, i))
+		args = append(args, b.relKindEq)
+	}
+
 	vars := map[string]any{
 		"relField": qNullField,
 	}
+
 	if b.withRels {
 		relFieldVars := map[string]any{}
 		if b.withRelRecs {
@@ -157,20 +175,25 @@ func (b Builder) buildQuery() (string, []any, error) {
 		vars["relGroup"] = qRelGroup
 		vars["relField"] = b.store.relFieldTmpl.ExecuteString(relFieldVars)
 	}
+	if len(relPreds) > 0 {
+		vars["relWhere"] = `JOIN relations rl ON rl.from_id = r.id AND ` + strings.Join(relPreds, ` AND `)
+	}
 	if len(preds) > 0 {
 		vars["where"] = ` WHERE ` + strings.Join(preds, ` AND `)
 	}
+
 	return b.store.selectTmpl.ExecuteString(vars), args, nil
 }
 
 const qSelect = `
-SELECT records.id,
-	records.kind,
-	records.attributes,
-	{{relField}}
-	records.created_at,
-	records.updated_at
-FROM records
+SELECT r.id,
+	  r.kind,
+	  r.attributes,
+	  {{relField}}
+	  r.created_at,
+	  r.updated_at
+FROM records r
+{{relWhere}}
 {{relJoin}}
 {{recJoin}}
 {{where}}
@@ -191,11 +214,11 @@ jsonb_agg(jsonb_build_object(
 )),
 `
 const qRelJoin = `
-LEFT JOIN relations rels ON rels.from_id = records.id
+LEFT JOIN relations rels ON rels.from_id = r.id
 
 `
 const qRelGroup = `
-GROUP BY records.id;
+GROUP BY r.id;
 `
 const qRecField = `
 'rec', jsonb_build_object(

@@ -107,6 +107,15 @@ var seedCmd = &cobra.Command{
 			return err
 		}
 
+		err = s.Rec().RelKind("PartOf").Each(ctx, func(rec *store.Rec) bool {
+			j, _ := json.Marshal(rec)
+			fmt.Printf("record that is PartOf something: %s\n", j)
+			return true
+		})
+		if err != nil {
+			return err
+		}
+
 		return nil
 	},
 }
