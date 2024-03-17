@@ -3,7 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"os"
+	"fmt"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
@@ -82,16 +82,30 @@ var seedCmd = &cobra.Command{
 			return err
 		}
 
-		// rec, err := s.Rec().Get(ctx, chapterID)
-		// rec, err := s.Rec().WithRels().Get(ctx, chapterID)
-		rec, err := s.Rec().WithRelRecs().Get(ctx, chapterID)
+		rec, err := s.Rec().WithRelRecs().HasAttr("title").Get(ctx, chapterID)
+		if err != nil {
+			return err
+		}
+		j, _ := json.MarshalIndent(rec, "", "  ")
+		fmt.Printf("chapter: %s\n", j)
+
+		err = s.Rec().WithRels().Kind("Person").Each(ctx, func(rec *store.Rec) bool {
+			j, _ := json.Marshal(rec)
+			fmt.Printf("person: %s\n", j)
+			return true
+		})
 		if err != nil {
 			return err
 		}
 
-		j, _ := json.MarshalIndent(rec, "", "  ")
-
-		os.Stdout.Write(j)
+		err = s.Rec().KindMatches("Publication.*").Each(ctx, func(rec *store.Rec) bool {
+			j, _ := json.Marshal(rec)
+			fmt.Printf("publication: %s\n", j)
+			return true
+		})
+		if err != nil {
+			return err
+		}
 
 		return nil
 	},

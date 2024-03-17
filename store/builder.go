@@ -10,11 +10,14 @@ import (
 )
 
 type Builder struct {
-	s           *Store
-	withRels    bool
-	withRelRecs bool
-	whereID     string
-	whereAttr   []map[string]any
+	store        *Store
+	withRels     bool
+	withRelRecs  bool
+	idEq         string
+	kindEq       string
+	kindMatches  string
+	hasAttr      []string
+	attrContains []map[string]any
 }
 
 func (b Builder) WithRels() Builder {
@@ -28,21 +31,35 @@ func (b Builder) WithRelRecs() Builder {
 	return b
 }
 
-func (b Builder) WhereAttr(key string, val any) Builder {
-	b.whereAttr = append(b.whereAttr, map[string]any{key: val})
+func (b Builder) Kind(kind string) Builder {
+	b.kindEq = kind
+	return b
+}
+
+func (b Builder) KindMatches(kind string) Builder {
+	b.kindMatches = kind
+	return b
+}
+
+func (b Builder) HasAttr(key string) Builder {
+	b.hasAttr = append(b.hasAttr, key)
+	return b
+}
+
+func (b Builder) AttrContains(key string, val any) Builder {
+	b.attrContains = append(b.attrContains, map[string]any{key: val})
 	return b
 }
 
 func (b Builder) Get(ctx context.Context, id string) (*Rec, error) {
-	b.whereID = id
-	q := b.buildQuery()
-	args, err := b.buildArgs()
+	b.idEq = id
+	q, args, err := b.buildQuery()
 	if err != nil {
 		return nil, err
 	}
 
 	var rec Rec
-	err = b.s.pool.QueryRow(ctx, q, args...).Scan(
+	err = b.store.pool.QueryRow(ctx, q, args...).Scan(
 		&rec.ID,
 		&rec.Kind,
 		&rec.Attrs,
@@ -60,13 +77,12 @@ func (b Builder) Get(ctx context.Context, id string) (*Rec, error) {
 }
 
 func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
-	q := b.buildQuery()
-	args, err := b.buildArgs()
+	q, args, err := b.buildQuery()
 	if err != nil {
 		return err
 	}
 
-	rows, err := b.s.pool.Query(ctx, q, args...)
+	rows, err := b.store.pool.Query(ctx, q, args...)
 	if err != nil {
 		return err
 	}
@@ -92,32 +108,42 @@ func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
 	return nil
 }
 
-func (b Builder) buildArgs() ([]any, error) {
+func (b Builder) buildQuery() (string, []any, error) {
 	var args []any
-	if b.whereID != "" {
-		args = append(args, b.whereID)
+	var preds []string
+	var i int
+
+	if b.idEq != "" {
+		i++
+		preds = append(preds, fmt.Sprintf(`records.id = $%d`, i))
+		args = append(args, b.idEq)
 	}
-	for _, pred := range b.whereAttr {
+	if b.kindEq != "" {
+		i++
+		preds = append(preds, fmt.Sprintf(`records.kind = $%d`, i))
+		args = append(args, b.kindEq)
+	}
+	if b.kindMatches != "" {
+		i++
+		preds = append(preds, fmt.Sprintf(`records.kind ~ $%d`, i))
+		args = append(args, b.kindMatches)
+	}
+	for _, pred := range b.hasAttr {
+		i++
+		preds = append(preds, fmt.Sprintf(`records.attributes ? $%d`, i))
+		args = append(args, pred)
+	}
+	for _, pred := range b.attrContains {
+		i++
+		preds = append(preds, fmt.Sprintf(`records.attributes @> $%d::jsonb`, i))
+
 		j, err := json.Marshal(pred)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		args = append(args, string(j))
 	}
-	return args, nil
-}
 
-func (b Builder) buildQuery() string {
-	var preds []string
-	var i int
-	if b.whereID != "" {
-		i++
-		preds = append(preds, fmt.Sprintf(`records.id = $%d`, i))
-	}
-	for range b.whereAttr {
-		i++
-		preds = append(preds, fmt.Sprintf(`records.attributes @> $%d::jsonb`, i))
-	}
 	vars := map[string]any{
 		"relField": qNullField,
 	}
@@ -129,12 +155,12 @@ func (b Builder) buildQuery() string {
 		}
 		vars["relJoin"] = qRelJoin
 		vars["relGroup"] = qRelGroup
-		vars["relField"] = b.s.relFieldTmpl.ExecuteString(relFieldVars)
+		vars["relField"] = b.store.relFieldTmpl.ExecuteString(relFieldVars)
 	}
 	if len(preds) > 0 {
 		vars["where"] = ` WHERE ` + strings.Join(preds, ` AND `)
 	}
-	return b.s.selectTmpl.ExecuteString(vars)
+	return b.store.selectTmpl.ExecuteString(vars), args, nil
 }
 
 const qSelect = `
@@ -149,8 +175,7 @@ FROM records
 {{recJoin}}
 {{where}}
 {{relGroup}}
-;
-`
+;`
 const qNullField = `
 	NULL,
 `

@@ -56,7 +56,7 @@ type Rel struct {
 }
 
 func (s *Store) Rec() Builder {
-	return Builder{s: s}
+	return Builder{store: s}
 }
 
 // TODO optimistic locking
