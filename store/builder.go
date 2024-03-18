@@ -29,6 +29,13 @@ func (b Builder) WithRelRecs() Builder {
 	return b
 }
 
+func (b Builder) ID(id string) Builder {
+	i := len(b.args) + 1
+	b.filters = append(b.filters, fmt.Sprintf(`r.id = $%d`, i))
+	b.args = append(b.args, id)
+	return b
+}
+
 func (b Builder) Kind(kind string) Builder {
 	i := len(b.args) + 1
 	b.filters = append(b.filters, fmt.Sprintf(`r.kind = $%d`, i))
@@ -93,16 +100,9 @@ func (b Builder) RelAttrContains(key string, val any) Builder {
 	return b
 }
 
-func (b Builder) ID(id string) Builder {
-	i := len(b.args) + 1
-	b.filters = append(b.filters, fmt.Sprintf(`r.id = $%d`, i))
-	b.args = append(b.args, id)
-	return b
-}
-
 func (b Builder) One(ctx context.Context) (*Rec, error) {
 	var rec Rec
-	err := b.store.pool.QueryRow(ctx, b.Query(), b.args...).Scan(
+	err := b.store.pool.QueryRow(ctx, b.query(), b.args...).Scan(
 		&rec.ID,
 		&rec.Kind,
 		&rec.Attrs,
@@ -120,7 +120,7 @@ func (b Builder) One(ctx context.Context) (*Rec, error) {
 }
 
 func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
-	rows, err := b.store.pool.Query(ctx, b.Query(), b.args...)
+	rows, err := b.store.pool.Query(ctx, b.query(), b.args...)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func (b Builder) Each(ctx context.Context, fn func(*Rec) bool) error {
 	return nil
 }
 
-func (b Builder) Query() string {
+func (b Builder) query() string {
 	vars := map[string]any{
 		"relField": qNullField,
 	}
@@ -201,7 +201,6 @@ jsonb_agg(jsonb_build_object(
 `
 const qRelJoin = `
 LEFT JOIN relations rels ON rels.from_id = r.id
-
 `
 const qRelGroup = `
 GROUP BY r.id;
