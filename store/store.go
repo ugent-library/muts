@@ -4,20 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/valyala/fasttemplate"
 )
 
 var ErrNotFound = errors.New("not found")
 
 type Store struct {
-	pool         *pgxpool.Pool
-	selectTmpl   *fasttemplate.Template
-	relFieldTmpl *fasttemplate.Template
+	pool *pgxpool.Pool
+	// selectTmpl   *fasttemplate.Template
+	// relFieldTmpl *fasttemplate.Template
 }
 
 func New(ctx context.Context, conn string) (*Store, error) {
@@ -30,33 +28,47 @@ func New(ctx context.Context, conn string) (*Store, error) {
 
 func NewFromPool(pool *pgxpool.Pool) (*Store, error) {
 	return &Store{
-		pool:         pool,
-		selectTmpl:   fasttemplate.New(qSelect, "{{", "}}"),
-		relFieldTmpl: fasttemplate.New(qRelField, "{{", "}}"),
+		pool: pool,
+		// selectTmpl:   fasttemplate.New(qSelect, "{{", "}}"),
+		// relFieldTmpl: fasttemplate.New(qRelField, "{{", "}}"),
 	}, nil
 }
 
-type Rec struct {
-	ID        string          `json:"id"`
-	Kind      string          `json:"kind"`
-	Attrs     json.RawMessage `json:"attrs"`
-	Rels      []*Rel          `json:"rels,omitempty"`
-	CreatedAt time.Time       `json:"createdAt"`
-	UpdatedAt time.Time       `json:"updatedAt"`
+//	func (s *Store) Rec() Builder {
+//		return Builder{store: s}
+//	}
+
+type Query struct {
+	Limit  int `json:"-"`
+	Offset int `json:"-"`
+	// ID     string   `json:"id,omitempty"`
+	ID     []string `json:"id_in,omitempty"`
+	Kind   string   `json:"kind,omitempty"`
+	Attr   string   `json:"attr,omitempty"`
+	Follow string   `json:"follow,omitempty"`
 }
 
-type Rel struct {
-	ID        string          `json:"id"`
-	Kind      string          `json:"kind"`
-	Attrs     json.RawMessage `json:"attrs"`
-	RecID     string          `json:"recID"`
-	Rec       *Rec            `json:"rec,omitempty"`
-	CreatedAt time.Time       `json:"createdAt"`
-	UpdatedAt time.Time       `json:"updatedAt"`
-}
-
-func (s *Store) Rec() Builder {
-	return Builder{store: s}
+func (s *Store) Many(ctx context.Context, query Query) ([]*Record, error) {
+	q, err := json.Marshal(query)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, "select * from muts_select($1) limit $2 offset $3", q, query.Limit, query.Offset)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*Record, error) {
+		rec := Record{}
+		err := row.Scan(
+			&rec.ID,
+			&rec.Kind,
+			&rec.Attributes,
+			&rec.CreatedAt,
+			&rec.UpdatedAt,
+			&rec.Relations,
+		)
+		return &rec, err
+	})
 }
 
 // TODO optimistic locking
@@ -78,7 +90,7 @@ func (s *Store) Mutate(ctx context.Context, muts ...Mut) error {
 
 	_, err := s.pool.CopyFrom(
 		ctx,
-		pgx.Identifier{"mutations"},
+		pgx.Identifier{"muts_mutations"},
 		[]string{"record_id", "author", "reason", "ops"},
 		pgx.CopyFromRows(rows),
 	)

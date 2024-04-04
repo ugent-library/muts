@@ -14,7 +14,7 @@ type Op struct {
 }
 
 func AddRec(kind string, attrs any) Op {
-	return Op{Name: "add-rec", Args: struct {
+	return Op{Name: "add_rec", Args: struct {
 		Kind  string `json:"kind"`
 		Attrs any    `json:"attrs,omitempty"`
 	}{
@@ -24,7 +24,7 @@ func AddRec(kind string, attrs any) Op {
 }
 
 func SetAttr(key string, val any) Op {
-	return Op{Name: "set-attr", Args: struct {
+	return Op{Name: "set_attr", Args: struct {
 		Key string `json:"key"`
 		Val any    `json:"val"`
 	}{
@@ -34,7 +34,7 @@ func SetAttr(key string, val any) Op {
 }
 
 func DelAttr(key string) Op {
-	return Op{Name: "del-attr", Args: struct {
+	return Op{Name: "del_attr", Args: struct {
 		Key string `json:"key"`
 	}{
 		Key: key,
@@ -42,11 +42,11 @@ func DelAttr(key string) Op {
 }
 
 func ClearAttrs() Op {
-	return Op{Name: "clear-attrs"}
+	return Op{Name: "clear_attrs"}
 }
 
 func AddRel(id, kind, to string, attrs any) Op {
-	return Op{Name: "add-rel", Args: struct {
+	return Op{Name: "add_rel", Args: struct {
 		ID    string `json:"id"`
 		Kind  string `json:"kind"`
 		To    string `json:"to"`
@@ -60,7 +60,7 @@ func AddRel(id, kind, to string, attrs any) Op {
 }
 
 func DelRel(id string) Op {
-	return Op{Name: "del-rel", Args: struct {
+	return Op{Name: "del_rel", Args: struct {
 		ID string `json:"id"`
 	}{
 		ID: id,

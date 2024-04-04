@@ -1,7 +1,7 @@
 -- +goose Up
 
 -- +goose StatementBegin
-CREATE FUNCTION apply_mutation() 
+CREATE FUNCTION muts_apply_mutation() 
 RETURNS TRIGGER 
 LANGUAGE PLPGSQL
 AS $$
@@ -12,8 +12,8 @@ BEGIN
   LOOP
     CASE op->>'name'
  
-    WHEN 'add-rec' THEN
-      INSERT INTO records (id, kind, attributes, created_at, updated_at)
+    WHEN 'add_rec' THEN
+      INSERT INTO muts_records (id, kind, attributes, created_at, updated_at)
       VALUES (
         NEW.record_id,
         (op->'args'->>'kind')::ltree,
@@ -22,77 +22,77 @@ BEGIN
         NEW.created_at
       );
 
-    WHEN 'set-attr' THEN
-      UPDATE records
+    WHEN 'set_attr' THEN
+      UPDATE muts_records
       SET attributes = attributes || jsonb_build_object(op->'args'->>'key', op->'args'->'val'), updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
-    WHEN 'del-attr' THEN
-      UPDATE records
+    WHEN 'del_attr' THEN
+      UPDATE muts_records
       SET attributes = attributes - op->'args'->>'key', updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
-    WHEN 'clear-attrs' THEN
-      UPDATE records
+    WHEN 'clear_attrs' THEN
+      UPDATE muts_records
       SET attributes = '{}'::jsonb, updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
-    WHEN 'add-rel' THEN
-      INSERT INTO relations (id, kind, from_id, to_id, position, attributes, created_at, updated_at)
+    WHEN 'add_rel' THEN
+      INSERT INTO muts_relations (id, kind, from_id, to_id, position, attributes, created_at, updated_at)
       VALUES (
         op->'args'->>'id',
         (op->'args'->>'kind')::ltree,
         NEW.record_id,
         op->'args'->>'to',
-        (SELECT COUNT(*) FROM relations WHERE from_id = NEW.record_id AND kind = (op->'args'->>'kind')::ltree),
+        (SELECT COUNT(*) FROM muts_relations WHERE from_id = NEW.record_id AND kind = (op->'args'->>'kind')::ltree),
         coalesce(op->'args'->'attrs', '{}'::jsonb),
         NEW.created_at,
         NEW.created_at
       );
 
-      UPDATE records
+      UPDATE muts_records
       SET updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
-    WHEN 'set-rel-attr' THEN
-      UPDATE relations
+    WHEN 'set_rel_attr' THEN
+      UPDATE muts_relations
       SET attributes = attributes || jsonb_build_object(op->'args'->>'key', op->'args'->'val'), updated_at = NEW.created_at
       WHERE id = op->'args'->>'id';
 
-      UPDATE records
+      UPDATE muts_records
       SET updated_at = NEW.created_at
       WHERE id = NEW.record_id;
-
-    WHEN 'del-rel-attr' THEN
-      UPDATE relations
+  
+    WHEN 'del_rel_attr' THEN
+      UPDATE muts_relations
       SET attributes = attributes - op->'args'->>'key', updated_at = NEW.created_at
       WHERE id = op->'args'->>'id';
 
-      UPDATE records
+      UPDATE muts_records
       SET updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
-    WHEN 'clear-rel-attrs' THEN
-      UPDATE relations
+    WHEN 'clear_rel_attrs' THEN
+      UPDATE muts_relations
       SET attributes = '{}'::jsonb, updated_at = NEW.created_at
       WHERE id = op->'args'->>'id';
 
-      UPDATE records
+      UPDATE muts_records
       SET updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
-    WHEN 'del-rel' THEN
+    WHEN 'del_rel' THEN
       WITH rel AS (
-        DELETE FROM relations
+        DELETE FROM muts_relations
         WHERE id = op->'args'->>'id'
         RETURNING kind, position
       )
-      UPDATE relations r
+      UPDATE muts_relations r
       SET position = r.position - 1
       FROM rel
       WHERE from_id = NEW.record_id AND r.kind = rel.kind AND r.position > rel.position;
 
-      UPDATE records
+      UPDATE muts_records
       SET updated_at = NEW.created_at
       WHERE id = NEW.record_id;
 
@@ -107,12 +107,12 @@ END;
 $$;
 -- +goose StatementEnd
 
-CREATE TRIGGER apply_mutation_trigger AFTER INSERT
-ON mutations
+CREATE TRIGGER muts_apply_mutation_trigger AFTER INSERT
+ON muts_mutations
 FOR EACH ROW
-EXECUTE PROCEDURE apply_mutation();
+EXECUTE PROCEDURE muts_apply_mutation();
 
 -- +goose Down
 
-DROP TRIGGER apply_mutation_trigger ON mutations;
-DROP FUNCTION apply_mutation;
+DROP TRIGGER muts_apply_mutation_trigger ON muts_mutations;
+DROP FUNCTION muts_apply_mutation;
