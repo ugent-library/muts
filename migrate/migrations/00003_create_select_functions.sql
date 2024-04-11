@@ -33,7 +33,7 @@ FROM  (
       WHEN _conds ? 'follow' THEN rl.kind ~ (_conds->>'follow')::lquery
       ELSE TRUE
     END) 
-     
+  
    ORDER  BY r.id
    ) sub
 $$;
@@ -49,19 +49,18 @@ CREATE FUNCTION muts_select(
 	out created_at timestamptz,
 	out updated_at timestamptz,
 	out relations jsonb
-	
 )
   RETURNS SETOF record
   LANGUAGE sql STABLE PARALLEL SAFE AS
-$func$
+$$
    SELECT 
           	id,
           	kind,
           	attributes,
           	created_at,
           	updated_at,
-          	muts_relations_tree(id, _conds) as relations -- TODO can be NULL
-   		  
+          	muts_relations_tree(id, _conds, _level) as relations -- TODO can be NULL
+
    FROM muts_records
    WHERE
    -- select by id
@@ -69,7 +68,7 @@ $func$
    	 WHEN _conds ? 'id' THEN id = _conds->>'id'
    	 WHEN _conds ? 'id_in' THEN id = any(SELECT jsonb_array_elements_text(_conds->'id_in'))
      ELSE TRUE
-   END) 
+   END)
    AND
    -- select by kind
    (CASE
@@ -82,7 +81,7 @@ $func$
    	 WHEN _conds ? 'attr' THEN attributes @? (_conds->>'attr')::jsonpath
      ELSE TRUE
    END)
-$func$;
+$$;
 -- +goose StatementEnd
 
 -- +goose Down

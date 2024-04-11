@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
 	"github.com/ugent-library/muts/store"
@@ -21,7 +22,16 @@ var seedCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		s, err := store.New(ctx, config.Store.Conn)
+		poolConfig, err := pgxpool.ParseConfig(config.Store.Conn)
+		if err != nil {
+			return err
+		}
+		// poolConfig.ConnConfig.Tracer = pgxslog.NewTracer(logger)
+		pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+		if err != nil {
+			return err
+		}
+		s, err := store.NewFromPool(pool)
 		if err != nil {
 			return err
 		}
@@ -41,14 +51,14 @@ var seedCmd = &cobra.Command{
 				RecordID: orgIDs[0],
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Organization", nil),
+					store.AddRec("Organization", map[string]any{"name": "UGent"}),
 				},
 			},
 			store.Mut{
 				RecordID: orgIDs[1],
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Organization", nil),
+					store.AddRec("Organization", map[string]any{"name": "UGent/CA"}),
 					store.AddRel(ulid.Make().String(), "Parent", orgIDs[0], nil),
 				},
 			},
@@ -56,7 +66,7 @@ var seedCmd = &cobra.Command{
 				RecordID: orgIDs[2],
 				Author:   "system",
 				Ops: []store.Op{
-					store.AddRec("Organization", nil),
+					store.AddRec("Organization", map[string]any{"name": "UGent/CA/CA20"}),
 					store.AddRel(ulid.Make().String(), "Parent", orgIDs[1], nil),
 				},
 			},
@@ -75,7 +85,7 @@ var seedCmd = &cobra.Command{
 				Ops: []store.Op{
 					store.AddRec("Person", nil),
 					store.SetAttr("name", "Mr. Whimsi"),
-					store.AddRel(ulid.Make().String(), "Affiliation", orgIDs[0], nil),
+					store.AddRel(ulid.Make().String(), "Affiliation", orgIDs[2], nil),
 				},
 			},
 			store.Mut{
@@ -111,52 +121,47 @@ var seedCmd = &cobra.Command{
 			return err
 		}
 
-		// rec, err := s.Rec().WithRelRecs().HasAttr("title").ID(chapterID).One(ctx)
-		// if err != nil {
-		// 	return err
-		// }
-		// j, _ := json.MarshalIndent(rec, "", "  ")
-		// fmt.Printf("chapter: %s\n", j)
-
-		// err = s.Rec().WithRels().Kind("Person").Each(ctx, func(rec *store.Rec) bool {
-		// 	j, _ := json.Marshal(rec)
-		// 	fmt.Printf("person: %s\n", j)
-		// 	return true
-		// })
-		// if err != nil {
-		// 	return err
-		// }
-
-		// err = s.Rec().KindMatches("Publication.*").Each(ctx, func(rec *store.Rec) bool {
-		// 	j, _ := json.Marshal(rec)
-		// 	fmt.Printf("publication: %s\n", j)
-		// 	return true
-		// })
-		// if err != nil {
-		// 	return err
-		// }
-
-		// err = s.Rec().RelKind("PartOf").Each(ctx, func(rec *store.Rec) bool {
-		// 	j, _ := json.Marshal(rec)
-		// 	fmt.Printf("record that is PartOf something: %s\n", j)
-		// 	return true
-		// })
-		// if err != nil {
-		// 	return err
-		// }
-
-		// select * from muts_select('{"id": "01HSP4V7VCFSBRF7MECEH4KDRX"}');
-		// select * from muts_select('{"id": "01HSP4V7VCFSBRF7MECEH4KDRX", "follow":"PartOf|Contribution.*"}');
-		// select * from muts_select('{"id_in": ["01HSP4V7VCFSBRF7MECEH4KDRX", "01HSP4V7VCFSBRF7MECNWHJ1A5"]}');
-		// select * from muts_select('{"kind": "Publication.Chapter"}');
-		// select * from muts_select('{"kind": "Publication.*"}');
-		// select * from muts_select('{"attr": "$.title"}');
-		recs, err := s.Many(ctx, store.Query{Limit: 10})
+		recs, err := s.Many(ctx, store.Query{Limit: 2})
 		if err != nil {
 			return err
 		}
 		j, _ := json.Marshal(recs)
-		fmt.Printf("many: %s\n", j)
+		fmt.Printf("many limit 2: %s\n", j)
+
+		recs, err = s.Many(ctx, store.Query{Limit: 10, ID: chapterID, Follow: "PartOf|Contribution.*"})
+		if err != nil {
+			return err
+		}
+		j, _ = json.Marshal(recs)
+		fmt.Printf("id + follow: %s\n", j)
+
+		recs, err = s.Many(ctx, store.Query{Limit: 10, IDIn: []string{chapterID, bookID}})
+		if err != nil {
+			return err
+		}
+		j, _ = json.Marshal(recs)
+		fmt.Printf("many id in: %s\n", j)
+
+		recs, err = s.Many(ctx, store.Query{Limit: 10, Kind: "Publication.Chapter"})
+		if err != nil {
+			return err
+		}
+		j, _ = json.Marshal(recs)
+		fmt.Printf("many kind Publication.Chapter: %s\n", j)
+
+		recs, err = s.Many(ctx, store.Query{Limit: 10, Kind: "Publication.*", Follow: "PartOf"})
+		if err != nil {
+			return err
+		}
+		j, _ = json.Marshal(recs)
+		fmt.Printf("many kind Publication.*: %s\n", j)
+
+		recs, err = s.Many(ctx, store.Query{Limit: 10, Attr: "$.title"})
+		if err != nil {
+			return err
+		}
+		j, _ = json.Marshal(recs)
+		fmt.Printf("many attr $.title: %s\n", j)
 
 		return nil
 	},

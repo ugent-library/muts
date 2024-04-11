@@ -39,13 +39,41 @@ func NewFromPool(pool *pgxpool.Pool) (*Store, error) {
 //	}
 
 type Query struct {
-	Limit  int `json:"-"`
-	Offset int `json:"-"`
-	// ID     string   `json:"id,omitempty"`
-	ID     []string `json:"id_in,omitempty"`
+	Limit  int      `json:"-"`
+	Offset int      `json:"-"`
+	ID     string   `json:"id,omitempty"`
+	IDIn   []string `json:"id_in,omitempty"`
 	Kind   string   `json:"kind,omitempty"`
 	Attr   string   `json:"attr,omitempty"`
 	Follow string   `json:"follow,omitempty"`
+}
+
+type OneOpts struct {
+	ID     string `json:"id,omitempty"`
+	Kind   string `json:"kind,omitempty"`
+	Attr   string `json:"attr,omitempty"`
+	Follow string `json:"follow,omitempty"`
+}
+
+func (s *Store) One(ctx context.Context, opts OneOpts) (*Record, error) {
+	o, err := json.Marshal(opts)
+	if err != nil {
+		return nil, err
+	}
+	row := s.pool.QueryRow(ctx, "select * from muts_select($1) limit 1", o)
+	var rec Record
+	err = row.Scan(
+		&rec.ID,
+		&rec.Kind,
+		&rec.Attributes,
+		&rec.CreatedAt,
+		&rec.UpdatedAt,
+		&rec.Relations,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &rec, nil
 }
 
 func (s *Store) Many(ctx context.Context, query Query) ([]*Record, error) {
@@ -53,7 +81,7 @@ func (s *Store) Many(ctx context.Context, query Query) ([]*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, "select * from muts_select($1) limit $2 offset $3", q, query.Limit, query.Offset)
+	rows, err := s.pool.Query(ctx, `select * from muts_select($1) limit $2 offset $3`, q, query.Limit, query.Offset)
 	if err != nil {
 		return nil, err
 	}
