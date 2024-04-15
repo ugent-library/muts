@@ -39,7 +39,7 @@ var seedCmd = &cobra.Command{
 
 		startTime := time.Now()
 
-		for i := 0; i < 100000; i++ {
+		for i := 0; i < 1000; i++ {
 			if i%100 == 0 {
 				fmt.Printf("creating subgraph %d...\n", i)
 			}
