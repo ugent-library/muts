@@ -345,18 +345,16 @@ $$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
-CREATE FUNCTION muts_select(
-	in query jsonb = '{}',
-	in depth int = 7,
-	out id text,
-	out kind ltree,
-	out properties jsonb,
-	out created_at timestamptz,
-	out updated_at timestamptz,
-	out links jsonb
+CREATE FUNCTION muts_select(query jsonb = '{}', depth int = 7)
+RETURNS table(
+  id text,
+  kind ltree,
+  properties jsonb,
+  created_at timestamptz,
+  updated_at timestamptz,
+  links jsonb
 )
-  RETURNS SETOF record
-  LANGUAGE plpgsql STABLE PARALLEL SAFE AS
+LANGUAGE plpgsql STABLE PARALLEL SAFE AS
 $$
 declare
 	v_sql text;
