@@ -306,11 +306,11 @@ $$;
 -- -- +goose StatementEnd
 
 -- +goose StatementBegin
-CREATE FUNCTION _muts_links_tree(_rec_id text, _conds jsonb = '{}', _level int = 7)
+CREATE FUNCTION _muts_links_tree(id text, query jsonb = '{}', depth int = 7)
   RETURNS jsonb
   LANGUAGE sql STABLE PARALLEL SAFE AS
 $$
-SELECT CASE WHEN _level > 1
+SELECT CASE WHEN depth > 1
             THEN jsonb_strip_nulls(jsonb_agg(sub))
 --            ELSE CASE WHEN count(*) > 0 THEN to_jsonb(count(*) || ' - stopped recursion at max level') END
        END
@@ -327,15 +327,15 @@ FROM  (
           	'properties', r.properties,
           	'created_at', r.created_at,
           	'updated_at', r.updated_at,
-          	'links', (CASE WHEN _level > 1 THEN _muts_links_tree(r.id, _conds, _level - 1) END)
+          	'links', (CASE WHEN depth > 1 THEN _muts_links_tree(r.id, query, depth - 1) END)
    		  ) AS node
    FROM   muts_links rl
    JOIN   muts_nodes r ON r.id = rl.to_id
    WHERE
-     rl.from_id = _rec_id
+     rl.from_id = _muts_links_tree.id
      AND
     (CASE
-      WHEN _conds ? 'follow' THEN rl.kind ~ (_conds->>'follow')::lquery
+      WHEN query ? 'follow' THEN rl.kind ~ (query->>'follow')::lquery
       ELSE TRUE
     END) 
   
@@ -346,8 +346,8 @@ $$;
 
 -- +goose StatementBegin
 CREATE FUNCTION muts_select(
-	in _conds jsonb = '{}',
-	in _level int = 7,
+	in query jsonb = '{}',
+	in depth int = 7,
 	out id text,
 	out kind ltree,
 	out properties jsonb,
@@ -356,35 +356,54 @@ CREATE FUNCTION muts_select(
 	out links jsonb
 )
   RETURNS SETOF record
-  LANGUAGE sql STABLE PARALLEL SAFE AS
+  LANGUAGE plpgsql STABLE PARALLEL SAFE AS
 $$
-   SELECT id,
-          kind,
-          properties,
-          created_at,
-          updated_at,
-          _muts_links_tree(id, _conds, _level) as links -- TODO can be NULL
+declare
+	v_sql text;
+	v_item jsonb;
+begin
+	v_sql := format('
+	   SELECT id,
+	          kind,
+	          properties,
+	          created_at,
+	          updated_at,
+	          _muts_links_tree(%L, %L, %L) as links -- TODO can be NULL
+	   FROM muts_nodes
+	   WHERE TRUE
+	', id, query, depth);
 
-   FROM muts_nodes
-   WHERE
-   -- select by id
-   (CASE
-   	 WHEN _conds ? 'id' THEN id = _conds->>'id'
-   	 WHEN _conds ? 'id_in' THEN id = any(SELECT jsonb_array_elements_text(_conds->'id_in'))
-     ELSE TRUE
-   END)
-   AND
-   -- select by kind
-   (CASE
-   	 WHEN _conds ? 'kind' THEN kind ~ (_conds->>'kind')::lquery
-     ELSE TRUE
-   END)
-   AND
-   -- select by attribute
-   (CASE
-   	 WHEN _conds ? 'attr' THEN properties @? (_conds->>'attr')::jsonpath
-     ELSE TRUE
-   END)
+	if query ? 'id' then
+		case
+		when query->'id' ? 'eq' then
+	   		v_sql = v_sql || format(' AND id = %L', query->'id'->>'eq');
+		when query->'id' ? 'in' then
+	   		v_sql = v_sql || ' AND id IN (' || array_to_string(ARRAY(SELECT quote_literal(jsonb_array_elements_text(query->'id'->'in'))), ',') || ')';
+		end case;
+	end if;
+
+	if query ? 'kind' then
+		case
+		when query->'kind' ? 'eq' then
+	   		v_sql = v_sql || format(' AND kind = %L', query->'kind'->>'eq');
+		when query->'kind' ? 'in' then
+	   		v_sql = v_sql || ' AND kind IN (' || array_to_string(ARRAY(SELECT quote_literal(jsonb_array_elements_text(query->'kind'->'in'))), ',') || ')';
+		when query->'kind' ? 'isa' then
+	   		v_sql = v_sql || format(' AND kind <@ %L', query->'kind'->>'isa');
+		end case;
+	end if;
+
+	if query ? 'properties' then
+		FOR v_item IN SELECT jsonb_array_elements(query->'properties') LOOP
+			case
+			when v_item ? 'match' then
+		   		v_sql = v_sql || format(' AND properties @? %L', v_item->>'match');
+			end case;
+		end loop;
+	end if;
+
+	 RETURN QUERY EXECUTE v_sql;
+end;
 $$;
 -- +goose StatementEnd
 
