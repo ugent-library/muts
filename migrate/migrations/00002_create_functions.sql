@@ -197,8 +197,6 @@ $$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- TODO or just use a recursive cte and pass the response and a target json path
--- TODO or CASE all possible query options (WHEN properties->[0] etc)
 -- CREATE FUNCTION _muts_links_tree(id text, query jsonb, depth int = 7)
 --   RETURNS jsonb
 --   LANGUAGE sql STABLE PARALLEL SAFE AS
@@ -247,32 +245,33 @@ begin
     if v_i > 0 then
       v_sql = v_sql || ' OR ';
     end if;
-    v_sql = v_sql || replace($filter$
+    v_sql = v_sql || replace($follow$
       (CASE
       WHEN query->'follow'->_COUNTER_ is not null then
       	(case
       	when query->'follow'->_COUNTER_ ? 'eq' then
-			rl.kind = (query->'follow'->_COUNTER_->>'eq')::ltree 
-		when query->'follow'->_COUNTER_ ? 'isa' then
-			rl.kind <@ (query->'follow'->_COUNTER_->>'isa')::ltree
+			    rl.kind = (query->'follow'->_COUNTER_->>'eq')::ltree 
+		    when query->'follow'->_COUNTER_ ? 'isa' then
+			    rl.kind <@ (query->'follow'->_COUNTER_->>'isa')::ltree
       	end)
       	AND
       	(case
       	when query->'follow'->_COUNTER_ ? 'filter' then
-			rl.properties @? (query->'follow'->_COUNTER_->>'filter')::jsonpath
-		else
-			TRUE
+			    rl.properties @? (query->'follow'->_COUNTER_->>'filter')::jsonpath
+		    else
+			    TRUE
       	end)
-      ELSE FALSE
-    END)
-    $filter$, '_COUNTER_', to_char(v_i, '9'));
+      ELSE
+        FALSE
+      END)
+    $follow$, '_COUNTER_', to_char(v_i, '9'));
   end loop;
 
   execute format($eval$
     CREATE FUNCTION muts_links_tree(id text, query jsonb, depth int = 7)
       RETURNS jsonb
       LANGUAGE sql STABLE PARALLEL SAFE AS
-    $func$
+    $body$
     SELECT CASE WHEN depth > 1
                 THEN jsonb_strip_nulls(jsonb_agg(sub))
                 -- ELSE CASE WHEN count(*) > 0 THEN to_jsonb(count(*) || ' - stopped recursion at max level') END
@@ -299,72 +298,109 @@ begin
         AND (
           %s
         )
-      ORDER  BY r.id
+      ORDER BY r.id
     ) sub
-    $func$;
+    $body$;
   $eval$, v_sql);
 end$$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
-CREATE FUNCTION muts_select(query jsonb = '{}', depth int = 7)
-RETURNS table(
-  id text,
-  kind ltree,
-  properties jsonb,
-  created_at timestamptz,
-  updated_at timestamptz,
-  links jsonb
-)
-LANGUAGE plpgsql STABLE PARALLEL SAFE AS
-$$
-declare
-	v_sql text;
-	v_item jsonb;
+DO $$
 begin
-	v_sql := format('
-	   SELECT id,
-	          kind,
-	          properties,
-	          created_at,
-	          updated_at,
-	          muts_links_tree(%L, %L, %L) as links -- TODO can be NULL
-	   FROM muts_nodes
-	   WHERE TRUE
-	', id, query, depth);
+  execute format($eval$
+    CREATE FUNCTION muts_select(query jsonb = '{}', depth int = 7)
+    RETURNS table(
+      id text,
+      kind ltree,
+      properties jsonb,
+      created_at timestamptz,
+      updated_at timestamptz,
+      links jsonb
+    )
+    LANGUAGE sql STABLE PARALLEL SAFE AS
+    $body$
+      SELECT id,
+	           kind,
+	           properties,
+	           created_at,
+	           updated_at,
+	           muts_links_tree(id, query, depth) as links -- TODO can be NULL
+	    FROM muts_nodes
+	    WHERE
+    	(case
+      when query ? 'id_eq' then
+			  id = query->>'id_eq'
+		  when query ? 'id_in' then
+			  id = any(SELECT jsonb_array_elements_text(query->'id_in'))
+      else
+        true
+      end)
+      %s
+    $body$;
+  $eval$, '');
+end$$;
+-- +goose StatementEnd
 
-	if query ? 'id' then
-		case
-		when query->'id' ? 'eq' then
-	   		v_sql = v_sql || format(' AND id = %L', query->'id'->>'eq');
-		when query->'id' ? 'in' then
-	   		v_sql = v_sql || ' AND id IN (' || array_to_string(ARRAY(SELECT quote_literal(jsonb_array_elements_text(query->'id'->'in'))), ',') || ')';
-		end case;
-	end if;
+-- +goose StatementBegin
+-- CREATE FUNCTION muts_select(query jsonb = '{}', depth int = 7)
+-- RETURNS table(
+--   id text,
+--   kind ltree,
+--   properties jsonb,
+--   created_at timestamptz,
+--   updated_at timestamptz,
+--   links jsonb
+-- )
+-- LANGUAGE plpgsql STABLE PARALLEL SAFE AS
+-- $$
+-- declare
+-- 	v_sql text;
+-- 	v_item jsonb;
+-- begin
+-- 	v_sql := format('
+-- 	   SELECT id,
+-- 	          kind,
+-- 	          properties,
+-- 	          created_at,
+-- 	          updated_at,
+-- 	          muts_links_tree(%L, %L, %L) as links -- TODO can be NULL
+-- 	   FROM muts_nodes
+-- 	   WHERE TRUE
+-- 	', id, query, depth);
 
-	if query ? 'kind' then
-		case
-		when query->'kind' ? 'eq' then
-	   		v_sql = v_sql || format(' AND kind = %L', query->'kind'->>'eq');
-		when query->'kind' ? 'in' then
-	   		v_sql = v_sql || ' AND kind IN (' || array_to_string(ARRAY(SELECT quote_literal(jsonb_array_elements_text(query->'kind'->'in'))), ',') || ')';
-		when query->'kind' ? 'isa' then
-	   		v_sql = v_sql || format(' AND kind <@ %L', query->'kind'->>'isa');
-		end case;
-	end if;
+-- 	if query ? 'id' then
+-- 		case
+-- 		when query->'id' ? 'eq' then
+-- 	   		v_sql = v_sql || format(' AND id = %L', query->'id'->>'eq');
+-- 		when query->'id' ? 'in' then
+-- 	   		v_sql = v_sql || ' AND id IN (' || array_to_string(ARRAY(SELECT quote_literal(jsonb_array_elements_text(query->'id'->'in'))), ',') || ')';
+-- 		end case;
+-- 	end if;
 
-	if query ? 'properties' then
-		FOR v_item IN SELECT jsonb_array_elements(query->'properties') LOOP
-			case
-			when v_item ? 'match' then
-		   		v_sql = v_sql || format(' AND properties @? %L', v_item->>'match');
-			end case;
-		end loop;
-	end if;
+-- 	if query ? 'kind' then
+-- 		case
+-- 		when query->'kind' ? 'eq' then
+-- 	   		v_sql = v_sql || format(' AND kind = %L', query->'kind'->>'eq');
+-- 		when query->'kind' ? 'in' then
+-- 	   		v_sql = v_sql || ' AND kind IN (' || array_to_string(ARRAY(SELECT quote_literal(jsonb_array_elements_text(query->'kind'->'in'))), ',') || ')';
+-- 		when query->'kind' ? 'isa' then
+-- 	   		v_sql = v_sql || format(' AND kind <@ %L', query->'kind'->>'isa');
+-- 		end case;
+-- 	end if;
 
-  RETURN QUERY EXECUTE v_sql;
-end;
-$$;
+-- 	if query ? 'properties' then
+-- 		FOR v_item IN SELECT jsonb_array_elements(query->'properties') LOOP
+-- 			case
+-- 			when v_item ? 'match' then
+-- 		   		v_sql = v_sql || format(' AND properties @? %L', v_item->>'match');
+-- 			end case;
+-- 		end loop;
+-- 	end if;
+
+--   RETURN QUERY EXECUTE v_sql;
+-- end;
+-- $$;
 -- +goose StatementEnd
 
 -- -- +goose StatementBegin
