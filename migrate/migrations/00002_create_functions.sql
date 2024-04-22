@@ -328,14 +328,23 @@ begin
 	           muts_links_tree(id, query, depth) as links -- TODO can be NULL
 	    FROM muts_nodes
 	    WHERE
-    	(case
-      when query ? 'id_eq' then
-			  id = query->>'id_eq'
-		  when query ? 'id_in' then
-			  id = any(SELECT jsonb_array_elements_text(query->'id_in'))
-      else
-        true
-      end)
+      (case when query ? 'id' then
+        case
+        when query->'id' ? 'eq' then
+          id = query->'id'->>'eq'
+        when query->'id' ? 'in' then
+          id = any(SELECT jsonb_array_elements_text(query->'id'->'in'))
+        end      
+      else true end)
+      AND
+      (case when query ? 'kind' then
+        case
+        when query->'kind' ? 'eq' then
+          kind = (query->'kind'->>'eq')::ltree
+        when query->'kind' ? 'isa' then
+  			  kind <@ (query->'kind'->>'isa')::ltree
+        end      
+      else true end)
       %s
     $body$;
   $eval$, '');
