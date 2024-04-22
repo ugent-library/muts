@@ -196,152 +196,114 @@ $$
 $$;
 -- +goose StatementEnd
 
--- -- +goose StatementBegin
--- CREATE FUNCTION muts_mutate(
---   _node_id text,
---   _ops jsonb,
---   _ts timestamptz = transaction_timestamp()
--- )
--- RETURNS VOID
--- LANGUAGE PLPGSQL
--- AS $$
--- DECLARE
--- 	op jsonb;
--- BEGIN
---   FOR op IN SELECT * FROM jsonb_array_elements(_ops)
---   LOOP
---     CASE op->>'name'
- 
---     WHEN 'add_rec' THEN
---       INSERT INTO muts_nodes (id, kind, properties, created_at, updated_at)
---       VALUES (
---         _node_id,
---         (op->'args'->>'kind')::ltree,
---         coalesce(op->'args'->'attrs', '{}'::jsonb),
---         _ts,
---         _ts
---       );
-
---     WHEN 'set_attr' THEN
---       UPDATE muts_nodes
---       SET properties = properties || jsonb_build_object(op->'args'->>'key', op->'args'->'val'), updated_at = _ts
---       WHERE id = _node_id;
-
---     WHEN 'del_attr' THEN
---       UPDATE muts_nodes
---       SET properties = properties - op->'args'->>'key', updated_at = _ts
---       WHERE id = _node_id;
-
---     WHEN 'clear_attrs' THEN
---       UPDATE muts_nodes
---       SET properties = '{}'::jsonb, updated_at = _ts
---       WHERE id = _node_id;
-
---     WHEN 'add_rel' THEN
---       INSERT INTO muts_links (id, kind, from_id, to_id, position, properties, created_at, updated_at)
---       VALUES (
---         op->'args'->>'id',
---         (op->'args'->>'kind')::ltree,
---         _node_id,
---         op->'args'->>'to',
---         (SELECT COUNT(*) FROM muts_links WHERE from_id = _node_id AND kind = (op->'args'->>'kind')::ltree),
---         coalesce(op->'args'->'attrs', '{}'::jsonb),
---         _ts,
---         _ts
---       );
-
---       UPDATE muts_nodes
---       SET updated_at = _ts
---       WHERE id = _node_id;
-
---     WHEN 'set_rel_attr' THEN
---       UPDATE muts_links
---       SET properties = properties || jsonb_build_object(op->'args'->>'key', op->'args'->'val'), updated_at = _ts
---       WHERE id = op->'args'->>'id';
-
---       UPDATE muts_nodes
---       SET updated_at = _ts
---       WHERE id = _node_id;
+-- +goose StatementBegin
+-- TODO or just use a recursive cte and pass the response and a target json path
+-- TODO or CASE all possible query options (WHEN properties->[0] etc)
+-- CREATE FUNCTION _muts_links_tree(id text, query jsonb, depth int = 7)
+--   RETURNS jsonb
+--   LANGUAGE sql STABLE PARALLEL SAFE AS
+-- $$
+-- SELECT CASE WHEN depth > 1
+--             THEN jsonb_strip_nulls(jsonb_agg(sub))
+-- --            ELSE CASE WHEN count(*) > 0 THEN to_jsonb(count(*) || ' - stopped recursion at max level') END
+--        END
+-- FROM  (
+--    SELECT rl.id,
+--           rl.kind, 
+--           rl.properties,
+--           rl.position,
+--           rl.created_at,
+--           rl.updated_at,
+--           jsonb_build_object(
+--           	'id', r.id,
+--           	'kind', r.kind,
+--           	'properties', r.properties,
+--           	'created_at', r.created_at,
+--           	'updated_at', r.updated_at,
+--           	'links', (CASE WHEN depth > 1 THEN _muts_links_tree(r.id, query, depth - 1) END)
+--    		  ) AS node
+--    FROM   muts_links rl
+--    JOIN   muts_nodes r ON r.id = rl.to_id
+--    WHERE
+--      rl.from_id = _muts_links_tree.id
+--      AND
+--     (CASE
+--       WHEN query ? 'follow' THEN rl.kind ~ (query->>'follow')::lquery
+--       ELSE TRUE
+--     END) 
   
---     WHEN 'del_rel_attr' THEN
---       UPDATE muts_links
---       SET properties = properties - op->'args'->>'key', updated_at = _ts
---       WHERE id = op->'args'->>'id';
-
---       UPDATE muts_nodes
---       SET updated_at = _ts
---       WHERE id = _node_id;
-
---     WHEN 'clear_rel_attrs' THEN
---       UPDATE muts_links
---       SET properties = '{}'::jsonb, updated_at = _ts
---       WHERE id = op->'args'->>'id';
-
---       UPDATE muts_nodes
---       SET updated_at = _ts
---       WHERE id = _node_id;
-
---     WHEN 'del_rel' THEN
---       WITH rel AS (
---         DELETE FROM muts_links
---         WHERE id = op->'args'->>'id'
---         RETURNING kind, position
---       )
---       UPDATE muts_links r
---       SET position = r.position - 1
---       FROM rel
---       WHERE from_id = _node_id AND r.kind = rel.kind AND r.position > rel.position;
-
---       UPDATE muts_nodes
---       SET updated_at = _ts
---       WHERE id = _node_id;
-
---     ELSE
---       RAISE EXCEPTION 'Unknown operation "%"', op->>'name';
-
---     END CASE;
---   END LOOP;
--- END;
+--    ORDER  BY r.id
+--    ) sub
 -- $$;
--- -- +goose StatementEnd
+-- +goose StatementEnd
 
 -- +goose StatementBegin
-CREATE FUNCTION _muts_links_tree(id text, query jsonb = '{}', depth int = 7)
-  RETURNS jsonb
-  LANGUAGE sql STABLE PARALLEL SAFE AS
-$$
-SELECT CASE WHEN depth > 1
-            THEN jsonb_strip_nulls(jsonb_agg(sub))
---            ELSE CASE WHEN count(*) > 0 THEN to_jsonb(count(*) || ' - stopped recursion at max level') END
-       END
-FROM  (
-   SELECT rl.id,
-          rl.kind, 
-          rl.properties,
-          rl.position,
-          rl.created_at,
-          rl.updated_at,
-          jsonb_build_object(
-          	'id', r.id,
-          	'kind', r.kind,
-          	'properties', r.properties,
-          	'created_at', r.created_at,
-          	'updated_at', r.updated_at,
-          	'links', (CASE WHEN depth > 1 THEN _muts_links_tree(r.id, query, depth - 1) END)
-   		  ) AS node
-   FROM   muts_links rl
-   JOIN   muts_nodes r ON r.id = rl.to_id
-   WHERE
-     rl.from_id = _muts_links_tree.id
-     AND
-    (CASE
-      WHEN query ? 'follow' THEN rl.kind ~ (query->>'follow')::lquery
-      ELSE TRUE
-    END) 
-  
-   ORDER  BY r.id
-   ) sub
-$$;
+DO $$
+declare
+  v_sql text;
+begin
+  v_sql := '';
+  for v_i in 0..9 loop
+    if v_i > 0 then
+      v_sql = v_sql || ' OR ';
+    end if;
+    v_sql = v_sql || replace($filter$
+      (CASE
+      WHEN query->'follow'->_COUNTER_ is not null then
+      	(case
+      	when query->'follow'->_COUNTER_ ? 'eq' then
+			rl.kind = (query->'follow'->_COUNTER_->>'eq')::ltree 
+		when query->'follow'->_COUNTER_ ? 'isa' then
+			rl.kind <@ (query->'follow'->_COUNTER_->>'isa')::ltree
+      	end)
+      	AND
+      	(case
+      	when query->'follow'->_COUNTER_ ? 'filter' then
+			rl.properties @? (query->'follow'->_COUNTER_->>'filter')::jsonpath
+		else
+			TRUE
+      	end)
+      ELSE FALSE
+    END)
+    $filter$, '_COUNTER_', to_char(v_i, '9'));
+  end loop;
+
+  execute format($eval$
+    CREATE FUNCTION muts_links_tree(id text, query jsonb, depth int = 7)
+      RETURNS jsonb
+      LANGUAGE sql STABLE PARALLEL SAFE AS
+    $func$
+    SELECT CASE WHEN depth > 1
+                THEN jsonb_strip_nulls(jsonb_agg(sub))
+                -- ELSE CASE WHEN count(*) > 0 THEN to_jsonb(count(*) || ' - stopped recursion at max level') END
+          END
+    FROM (
+      SELECT rl.id,
+              rl.kind, 
+              rl.properties,
+              rl.position,
+              rl.created_at,
+              rl.updated_at,
+              jsonb_build_object(
+                'id', r.id,
+                'kind', r.kind,
+                'properties', r.properties,
+                'created_at', r.created_at,
+                'updated_at', r.updated_at,
+                'links', (CASE WHEN depth > 1 THEN muts_links_tree(r.id, query, depth - 1) END)
+            ) AS node
+      FROM   muts_links rl
+      JOIN   muts_nodes r ON r.id = rl.to_id
+      WHERE
+        rl.from_id = muts_links_tree.id
+        AND (
+          %s
+        )
+      ORDER  BY r.id
+    ) sub
+    $func$;
+  $eval$, v_sql);
+end$$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
@@ -366,7 +328,7 @@ begin
 	          properties,
 	          created_at,
 	          updated_at,
-	          _muts_links_tree(%L, %L, %L) as links -- TODO can be NULL
+	          muts_links_tree(%L, %L, %L) as links -- TODO can be NULL
 	   FROM muts_nodes
 	   WHERE TRUE
 	', id, query, depth);
@@ -400,7 +362,7 @@ begin
 		end loop;
 	end if;
 
-	 RETURN QUERY EXECUTE v_sql;
+  RETURN QUERY EXECUTE v_sql;
 end;
 $$;
 -- +goose StatementEnd

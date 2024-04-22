@@ -38,20 +38,7 @@ CREATE INDEX muts_links_kind_gist_idx ON muts_links USING gist (kind);
 CREATE INDEX muts_links_position_idx ON muts_links (position);
 CREATE INDEX muts_links_properties_gin_idx ON muts_links USING gin (properties jsonb_path_ops);
 
--- CREATE TABLE muts_mutations (
---   id BIGSERIAL PRIMARY KEY,
---   node_id TEXT NOT NULL CHECK (node_id <> ''),
---   author TEXT NOT NULL CHECK (author <> ''),
---   reason TEXT CHECK (reason <> ''),
---   ops JSONB NOT NULL,
---   created_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp()
--- );
-
--- CREATE INDEX muts_mutations_node_id_key ON muts_mutations (node_id);
--- CREATE INDEX muts_mutations_created_at_key ON muts_mutations (created_at);
-
 -- +goose Down
 
 DROP TABLE muts_links CASCADE;
 DROP TABLE muts_nodes CASCADE;
--- DROP TABLE muts_mutations CASCADE;
